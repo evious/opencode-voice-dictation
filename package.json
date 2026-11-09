@@ -45,11 +45,14 @@
   },
   "devDependencies": {
     "@opencode/plugin": "2.2.6",
-    "effect": "4.1.0",
     "@types/node": "^24.0.0",
+    "effect": "4.1.0",
     "solid-js": "^1.9.17",
     "typescript": "^5.9.0",
     "vite": "^7.3.0",
     "vite-plugin-solid": "^2.11.0"
+  },
+  "dependencies": {
+    "opencode-voice-dictation": "^0.2.0"
   }
 }

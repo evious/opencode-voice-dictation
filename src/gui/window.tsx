@@ -1,5 +1,12 @@
 import { createSignal } from "solid-js"
-import { Command, ComposerPill, SettingsPage, type ComposerPillView, type Plugin } from "@opencode/plugin/gui"
+import {
+  Command,
+  ComposerPill,
+  SettingsPage,
+  type ComposerPillRow,
+  type ComposerPillView,
+  type Plugin,
+} from "@opencode/plugin/gui"
 import { Dictation, Speech, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import { createSpeaker } from "./speak"
@@ -208,23 +215,47 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   ctx.add(ComposerPill, () => ({
     id: "read",
     order: 1,
-    show: () => {
+    show: (): ComposerPillView | undefined => {
       if (ctx.app.platform !== "desktop") return undefined
 
-      return speaker.speaking()
-        ? {
-            label: ctx.t("read.speaking"),
-            icon: "outline-audio",
-            tone: "success",
-            title: ctx.t("read.stop"),
-            run: read,
-          }
-        : {
-            label: ctx.t("read.idle"),
-            icon: "outline-audio",
-            title: ctx.t("read.title"),
-            run: read,
-          }
+      if (!speaker.speaking()) {
+        return { label: ctx.t("read.idle"), icon: "outline-audio", title: ctx.t("read.title"), run: read }
+      }
+
+      const paused = speaker.paused()
+      const rows: ComposerPillRow[] = []
+
+      if (speaker.canPause()) {
+        rows.push({
+          id: "pause",
+          label: paused ? ctx.t("read.resume") : ctx.t("read.pause"),
+          icon: "outline-audio",
+          run: () => speaker.togglePause(),
+        })
+      }
+
+      rows.push({
+        id: "restart",
+        label: ctx.t("read.restart"),
+        icon: "outline-reset",
+        run: () => void speaker.restart(),
+      })
+
+      rows.push({
+        id: "stop",
+        label: ctx.t("read.stop"),
+        icon: "xmark-small",
+        tone: "danger",
+        run: () => speaker.cancel(),
+      })
+
+      return {
+        label: paused ? ctx.t("read.paused") : ctx.t("read.speaking"),
+        icon: "outline-audio",
+        tone: "success",
+        title: ctx.t("read.title"),
+        rows,
+      }
     },
   }))
 

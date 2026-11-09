@@ -143,9 +143,10 @@ La píldora del micrófono muestra el estado: `Dictar`, `Iniciando…`,
 `Escuchando…` (System.Speech), `Dictando…` (Win+H) y `Reintentar dictado` si
 algo falla.
 
-La píldora «Leer» cambia a `Leyendo…`; un segundo clic detiene la lectura.
-Dictar detiene la lectura y leer detiene el dictado, para que el micrófono no
-capture la voz del altavoz.
+La píldora «Leer» cambia a `Leyendo…`. Mientras lee, al pulsarla se abre un
+menú con **Pausar / Reanudar**, **Leer de nuevo** y **Detener**. La pausa
+continúa exactamente donde se quedó. Dictar detiene la lectura y leer detiene el
+dictado, para que el micrófono no capture la voz del altavoz.
 
 El texto se inserta en la posición del cursor. Si ya hay texto y no termina en
 espacio, se añade uno de separación (configurable).
@@ -174,6 +175,10 @@ espacio, se añade uno de separación (configurable).
 La lectura limpia el Markdown antes de hablar: quita fences, backticks,
 negritas, encabezados, viñetas y convierte `[texto](url)` en `texto`. Trocea el
 texto por frases para poder detenerse rápido.
+
+La pausa usa `speechSynthesis.pause()` / `resume()`. Con el motor de respaldo de
+PowerShell (SAPI) no hay pausa real: el menú muestra solo «Leer de nuevo» y
+«Detener».
 
 ## Permisos
 

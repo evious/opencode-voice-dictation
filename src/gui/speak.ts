@@ -10,12 +10,18 @@ export interface VoiceOption {
 
 export interface Speaker {
   speaking(): boolean
+  paused(): boolean
   backend(): "web" | "sapi" | "none"
+  canPause(): boolean
   voices(): VoiceOption[]
   refreshVoices(): Promise<void>
   lastAssistantText(): Promise<string>
   speak(text: string): Promise<boolean>
   cancel(): void
+  pause(): void
+  resume(): void
+  togglePause(): void
+  restart(): Promise<boolean>
   preview(): Promise<boolean>
 }
 
@@ -102,11 +108,13 @@ export function createSpeaker(
   const prefs = ctx.stores.speech
 
   const [speaking, setSpeaking] = createSignal(false)
+  const [paused, setPaused] = createSignal(false)
   const [voices, setVoices] = createSignal<VoiceOption[]>([])
   const [backend, setBackend] = createSignal<"web" | "sapi" | "none">("none")
 
   let generation = 0
   let queue: string[] = []
+  let lastText = ""
 
   const synth = () =>
     typeof globalThis.speechSynthesis !== "undefined" ? globalThis.speechSynthesis : undefined
@@ -157,11 +165,37 @@ export function createSpeaker(
     generation++
     queue = []
     synth()?.cancel()
+    setPaused(false)
     setSpeaking(false)
     void speech.stop().catch(() => {})
   }
 
+  const canPause = () => backend() === "web"
+
+  const pause = () => {
+    if (!speaking() || paused() || !canPause()) return
+    synth()?.pause()
+    setPaused(true)
+  }
+
+  const resume = () => {
+    if (!speaking() || !paused() || !canPause()) return
+    synth()?.resume()
+    setPaused(false)
+  }
+
+  const togglePause = () => {
+    if (paused()) resume()
+    else pause()
+  }
+
+  const restart = () => {
+    if (!lastText) return Promise.resolve(false)
+    return speak(lastText)
+  }
+
   const speak = async (text: string) => {
+    lastText = text
     const cleaned = cleanForSpeech(text, prefs.value.skipCode)
     if (!cleaned) return false
 
@@ -177,11 +211,13 @@ export function createSpeaker(
       const gen = generation
       queue = chunkForSpeech(cleaned)
       setSpeaking(true)
+      setPaused(false)
 
       const pump = () => {
         if (gen !== generation) return
         const next = queue.shift()
         if (!next) {
+          setPaused(false)
           setSpeaking(false)
           return
         }
@@ -201,6 +237,7 @@ export function createSpeaker(
 
     if (backend() === "sapi") {
       setSpeaking(true)
+      setPaused(false)
       try {
         await speech.speak({
           text: cleaned,
@@ -241,7 +278,10 @@ export function createSpeaker(
       .join("\n")
   }
 
-  speech.on("done", () => setSpeaking(false))
+  speech.on("done", () => {
+    setPaused(false)
+    setSpeaking(false)
+  })
 
   const engine = synth()
   engine?.addEventListener?.("voiceschanged", () => void refreshVoices())
@@ -249,12 +289,18 @@ export function createSpeaker(
 
   return {
     speaking,
+    paused,
     backend,
+    canPause,
     voices,
     refreshVoices,
     lastAssistantText,
     speak,
     cancel,
+    pause,
+    resume,
+    togglePause,
+    restart,
     preview: () => speak(ctx.t("speech.preview.text")),
   }
 }

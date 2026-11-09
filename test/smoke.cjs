@@ -38,11 +38,13 @@ function use(mode) {
 process.env.PATH = `${fakeDir}:${process.env.PATH}`
 
 // Web Speech API stub. The bundle reads these lazily, so each test can reset them.
-const speech = { spoken: [], cancelled: 0, autoEnd: true, voices: [] }
+const speech = { spoken: [], cancelled: 0, paused: 0, resumed: 0, autoEnd: true, voices: [] }
 
 function installWebSpeech(options = {}) {
   speech.spoken = []
   speech.cancelled = 0
+  speech.paused = 0
+  speech.resumed = 0
   speech.autoEnd = options.autoEnd ?? true
   speech.voices = options.voices ?? [{ name: "Test Voice", lang: "es-ES", voiceURI: "test-voice" }]
 
@@ -54,6 +56,12 @@ function installWebSpeech(options = {}) {
     },
     cancel: () => {
       speech.cancelled++
+    },
+    pause: () => {
+      speech.paused++
+    },
+    resume: () => {
+      speech.resumed++
     },
     addEventListener: () => {},
   }
@@ -67,12 +75,20 @@ function installWebSpeech(options = {}) {
 function uninstallWebSpeech() {
   speech.spoken = []
   speech.cancelled = 0
+  speech.paused = 0
+  speech.resumed = 0
   speech.voices = []
   globalThis.speechSynthesis = {
     getVoices: () => [],
     speak: () => {},
     cancel: () => {
       speech.cancelled++
+    },
+    pause: () => {
+      speech.paused++
+    },
+    resume: () => {
+      speech.resumed++
     },
     addEventListener: () => {},
   }
@@ -396,17 +412,58 @@ async function run() {
     if (pill.show({}).label !== "read.idle") throw new Error("still marked as reading")
   })
 
-  await test("second click stops the reading", async () => {
+  await test("the reading menu stops the speech", async () => {
     use("ok")
     installWebSpeech({ autoEnd: false })
     const h = host({ messages: { data: [{ type: "assistant", content: [{ type: "text", text: "Una frase larga." }] }] } })
     const pill = h.readPill()
     pill.show({}).run()
     await sleep(50)
-    if (pill.show({}).label !== "read.speaking") throw new Error("not marked as reading")
-    pill.show({}).run()
+    const view = pill.show({})
+    if (view.label !== "read.speaking") throw new Error("not marked as reading")
+    const stop = (view.rows ?? []).find((row) => row.id === "stop")
+    if (!stop) throw new Error("stop row missing")
+    stop.run()
     if (pill.show({}).label !== "read.idle") throw new Error("did not stop")
     if (!speech.cancelled) throw new Error("speechSynthesis.cancel not called")
+  })
+
+  await test("pause, resume and read again from the menu", async () => {
+    use("ok")
+    installWebSpeech({ autoEnd: false })
+    const h = host({ messages: { data: [{ type: "assistant", content: [{ type: "text", text: "Una frase larga para leer." }] }] } })
+    const pill = h.readPill()
+
+    pill.show({}).run()
+    await sleep(50)
+
+    let view = pill.show({})
+    const pause = (view.rows ?? []).find((row) => row.id === "pause")
+    if (!pause) throw new Error("pause row missing")
+    pause.run()
+    if (speech.paused !== 1) throw new Error(`paused ${speech.paused}`)
+    if (pill.show({}).label !== "read.paused") throw new Error("not marked as paused")
+
+    view = pill.show({})
+    const resume = (view.rows ?? []).find((row) => row.id === "pause")
+    if (!resume || resume.label !== "read.resume") throw new Error("resume row missing")
+    resume.run()
+    if (speech.resumed !== 1) throw new Error(`resumed ${speech.resumed}`)
+    if (pill.show({}).label !== "read.speaking") throw new Error("not speaking after resume")
+
+    const before = speech.spoken.length
+    view = pill.show({})
+    const restart = (view.rows ?? []).find((row) => row.id === "restart")
+    if (!restart) throw new Error("restart row missing")
+    restart.run()
+    await sleep(50)
+    if (speech.spoken.length <= before) throw new Error("did not read again")
+    if (pill.show({}).label !== "read.speaking") throw new Error("not speaking after restart")
+
+    view = pill.show({})
+    const stop = (view.rows ?? []).find((row) => row.id === "stop")
+    stop.run()
+    if (pill.show({}).label !== "read.idle") throw new Error("did not stop")
   })
 
   await test("no session explains why nothing is read", async () => {
