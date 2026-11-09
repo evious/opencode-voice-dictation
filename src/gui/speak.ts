@@ -12,7 +12,10 @@ export interface Speaker {
   speaking(): boolean
   paused(): boolean
   backend(): "web" | "sapi" | "edge" | "none"
+  engine(): "edge" | "system"
+  voice(): string
   canPause(): boolean
+  setConfig(input: { engine?: string; voice?: string }): void
   voices(): VoiceOption[]
   refreshVoices(): Promise<void>
   lastAssistantText(): Promise<string>
@@ -106,7 +109,15 @@ export function createSpeaker(
   speech: IpcClient<typeof Speech.spec>,
 ): Speaker {
   const prefs = ctx.stores.speech
-  const tts = ctx.stores.tts
+  const initial = ctx.stores.tts.value
+
+  const [engine, setEngine] = createSignal<"edge" | "system">(initial.engine === "edge" ? "edge" : "system")
+  const [voice, setVoice] = createSignal(initial.voice)
+
+  const setConfig = (input: { engine?: string; voice?: string }) => {
+    if (input.engine === "edge" || input.engine === "system") setEngine(input.engine)
+    if (input.voice !== undefined) setVoice(input.voice)
+  }
 
   const [speaking, setSpeaking] = createSignal(false)
   const [paused, setPaused] = createSignal(false)
@@ -138,17 +149,18 @@ export function createSpeaker(
   }
 
   const refreshVoices = async () => {
-    if (tts.value.engine === "edge") {
+    if (engine() === "edge") {
       try {
         const list = await speech.edgeVoices()
         if (list.length > 0) {
           setVoices(list.map((voice) => ({ id: voice.id, label: voice.label })))
-          setBackend("edge")
-          return
         }
       } catch {
-        // No internet or Edge changed: fall back to the system voices.
+        // Keep the current list. The error surfaces when speaking, never as a
+        // silent switch to the system voice.
       }
+      setBackend("edge")
+      return
     }
 
     const available = synth()?.getVoices() ?? []
@@ -236,10 +248,10 @@ export function createSpeaker(
   }
 
   const speakEdge = (cleaned: string) => {
-    const voice = tts.value.voice || "es-ES-XimenaNeural"
+    const selected = voice() || "es-ES-XimenaNeural"
     const rate = prefs.value.rate
     const blocks = chunkForSpeech(cleaned, 4000)
-    const key = `${voice}|${rate}|${cleaned}`
+    const key = `${selected}|${rate}|${cleaned}`
     const cached = edgeCache.get(key) ?? []
 
     edgeCache.clear()
@@ -262,7 +274,7 @@ export function createSpeaker(
 
         try {
           if (!encoded) {
-            encoded = await speech.edgeSpeak({ text: blocks[index] ?? "", voice, rate })
+            encoded = await speech.edgeSpeak({ text: blocks[index] ?? "", voice: selected, rate })
             cached[index] = encoded
           }
         } catch {
@@ -326,7 +338,7 @@ export function createSpeaker(
     cancel()
     await refreshVoices()
 
-    if (backend() === "edge") {
+    if (engine() === "edge") {
       return speakEdge(cleaned)
     }
     if (backend() === "web") {
@@ -410,15 +422,30 @@ export function createSpeaker(
     setSpeaking(false)
   })
 
-  const engine = synth()
-  engine?.addEventListener?.("voiceschanged", () => void refreshVoices())
+  const synthEngine = synth()
+  synthEngine?.addEventListener?.("voiceschanged", () => void refreshVoices())
   void refreshVoices()
+
+  const preview = async () => {
+    const started = await speak(ctx.t("speech.preview.text"))
+    if (started) {
+      const detail =
+        engine() === "edge"
+          ? `Edge · ${voice()}`
+          : `${backend()} · ${prefs.value.voiceURI || "auto"}`
+      ctx.toast.show({ variant: "default", title: ctx.t("read.title"), description: detail })
+    }
+    return started
+  }
 
   return {
     speaking,
     paused,
     backend,
+    engine,
+    voice,
     canPause,
+    setConfig,
     voices,
     refreshVoices,
     lastAssistantText,
@@ -428,6 +455,6 @@ export function createSpeaker(
     resume,
     togglePause,
     restart,
-    preview: () => speak(ctx.t("speech.preview.text")),
+    preview,
   }
 }

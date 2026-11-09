@@ -36,6 +36,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const [busy, setBusy] = createSignal(false)
 
   onMount(() => {
+    props.speaker.setConfig({ engine: ttsPrefs.value.engine, voice: ttsPrefs.value.voice })
     void dictation
       .diagnose()
       .then((result) => {
@@ -66,6 +67,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
       ttsPrefs.update((draft) => {
         draft.voice = value
       })
+      props.speaker.setConfig({ voice: value })
       return
     }
     patchSpeech({ voiceURI: value })
@@ -98,6 +100,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
     ttsPrefs.update((draft) => {
       draft.engine = engine
     })
+    props.speaker.setConfig({ engine })
     void props.speaker.refreshVoices()
   }
 
