@@ -1,0 +1,55 @@
+{
+  "name": "opencode-voice-dictation",
+  "version": "0.1.0",
+  "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows",
+  "license": "MIT",
+  "author": "Fran Carlos <francarlos803@gmail.com>",
+  "homepage": "https://github.com/evious/opencode-voice-dictation#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evious/opencode-voice-dictation.git"
+  },
+  "bugs": {
+    "url": "https://github.com/evious/opencode-voice-dictation/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "voice",
+    "dictation",
+    "speech-to-text",
+    "text-to-speech",
+    "windows",
+    "offline"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "files": [
+    "src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "node test/smoke.cjs",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run build && npm test"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.2.6",
+    "effect": "4.1.0",
+    "@types/node": "^24.0.0",
+    "solid-js": "^1.9.17",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}
