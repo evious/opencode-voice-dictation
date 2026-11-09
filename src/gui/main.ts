@@ -3,7 +3,6 @@ import { Dictation, Speech, VoiceTyping } from "./contract"
 import { diagnose, startEngine, type EngineHandle } from "./engines/system-speech"
 import { listSapiVoices, speakSapi, type SpeakHandle } from "./engines/sapi-speech"
 import { sendVoiceTypingShortcut } from "./engines/win-h"
-import { listEdgeVoices, synthesizeEdge } from "./engines/edge-tts"
 
 type Status = "idle" | "starting" | "listening" | "error"
 
@@ -129,14 +128,6 @@ export const main: Plugin.MainSetup = (ctx) => {
 
     voices() {
       return listSapiVoices()
-    },
-
-    edgeVoices() {
-      return listEdgeVoices()
-    },
-
-    edgeSpeak(input) {
-      return synthesizeEdge(input)
     },
   })
 

@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js"
 import type { IpcClient, SetupContext } from "@opencode/plugin/gui"
+import { VoiceRpc } from "../rpc"
 import { Speech } from "./contract"
 import type { definition } from "./definition"
 
@@ -153,7 +154,10 @@ export function createSpeaker(
   const refreshVoices = async () => {
     if (engine() === "edge") {
       try {
-        const list = await speech.edgeVoices()
+        const list = (await ctx.client.rpc(VoiceRpc).edgeVoices({})) as unknown as Array<{
+          id: string
+          label: string
+        }>
         if (list.length > 0) {
           setVoices(list.map((voice) => ({ id: voice.id, label: voice.label })))
           setError("")
@@ -279,7 +283,11 @@ export function createSpeaker(
 
         try {
           if (!encoded) {
-            encoded = await speech.edgeSpeak({ text: blocks[index] ?? "", voice: selected, rate })
+            encoded = (await ctx.client.rpc(VoiceRpc).edgeSpeak({
+              text: blocks[index] ?? "",
+              voice: selected,
+              rate,
+            })) as string
             cached[index] = encoded
           }
         } catch {

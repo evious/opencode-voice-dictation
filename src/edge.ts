@@ -1,12 +1,4 @@
-/**
- * Edge neural text-to-speech.
- *
- * `msedge-tts` is Node-only. It is resolved at runtime from the plugin's own
- * `node_modules`, only in the Electron main process.
- */
-import { createRequire } from "node:module"
-
-type EdgeModule = typeof import("msedge-tts")
+import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts"
 
 export interface EdgeVoiceInfo {
   id: string
@@ -22,25 +14,6 @@ interface RawVoice {
   Gender: string
 }
 
-let cached: EdgeModule | undefined
-
-function load(): EdgeModule {
-  if (cached) return cached
-
-  // Resolve from the bundle path. The app may evaluate the bundle with a
-  // `require` that points at its own directory, so `eval("require")` alone is
-  // not enough.
-  let runtimeRequire: NodeRequire
-  try {
-    runtimeRequire = createRequire(__filename)
-  } catch {
-    runtimeRequire = eval("require") as NodeRequire
-  }
-
-  cached = runtimeRequire("msedge-tts") as EdgeModule
-  return cached
-}
-
 function shortName(voice: RawVoice): string {
   const friendly = voice.FriendlyName.replace(/^Microsoft\s+/i, "")
     .replace(/\s+Online.*$/i, "")
@@ -53,11 +26,10 @@ function shortName(voice: RawVoice): string {
 }
 
 export async function listEdgeVoices(): Promise<EdgeVoiceInfo[]> {
-  const { MsEdgeTTS } = load()
   const tts = new MsEdgeTTS()
 
   try {
-    const voices = (await tts.getVoices()) as RawVoice[]
+    const voices = (await tts.getVoices()) as unknown as RawVoice[]
 
     return voices
       .filter((voice) => voice.Locale.toLowerCase().startsWith("es-"))
@@ -78,7 +50,6 @@ export async function synthesizeEdge(input: {
   voice: string
   rate: number
 }): Promise<string> {
-  const { MsEdgeTTS, OUTPUT_FORMAT } = load()
   const tts = new MsEdgeTTS()
 
   try {

@@ -1,6 +1,6 @@
 {
   "name": "opencode-voice-dictation",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",
@@ -25,7 +25,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./gui-experimental": "./dist/gui-experimental.cjs"
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
   },
   "files": [
     "src",
@@ -35,7 +36,7 @@
   ],
   "dependencies": {
     "msedge-tts": "^2.1.1",
-    "opencode-voice-dictation": "^0.2.0"
+    "@opencode/plugin": "2.2.6"
   },
   "publishConfig": {
     "access": "public"
@@ -48,7 +49,6 @@
     "prepublishOnly": "npm run typecheck && npm run build && npm test"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.2.6",
     "@types/node": "^24.0.0",
     "effect": "4.1.0",
     "solid-js": "^1.9.17",

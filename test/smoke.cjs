@@ -139,6 +139,9 @@ const fakeGui = {
 }
 Module._load = function (request, ...rest) {
   if (request === "@opencode/plugin/gui" || request === "@opencode/plugin/gui/main") return fakeGui
+  if (request === "@opencode/plugin/rpc" || request === "@opencode/schema/rpc") {
+    return { Rpc: { define: (value) => value } }
+  }
   return originalLoad.call(this, request, ...rest)
 }
 
@@ -195,15 +198,6 @@ function host(options = {}) {
       state.speechStopCalls++
     },
     voices: async () => options.sapiVoices ?? [],
-    edgeVoices: async () =>
-      options.edgeVoices ?? [
-        { id: "es-ES-XimenaNeural", label: "es-ES · Ximena", locale: "es-ES", gender: "Female" },
-        { id: "es-MX-DaliaNeural", label: "es-MX · Dalia", locale: "es-MX", gender: "Female" },
-      ],
-    edgeSpeak: async (input) => {
-      state.edgeCalls.push(input)
-      return options.edgeAudio ?? Buffer.from("fake-mp3").toString("base64")
-    },
     on: (name, fn) => {
       ;(speechListeners[name] ??= []).push(fn)
       return () => {}
@@ -216,10 +210,23 @@ function host(options = {}) {
     },
   }
 
+  const rpcClient = {
+    edgeVoices: async () =>
+      options.edgeVoices ?? [
+        { id: "es-ES-XimenaNeural", label: "es-ES · Ximena", locale: "es-ES", gender: "Female" },
+        { id: "es-MX-DaliaNeural", label: "es-MX · Dalia", locale: "es-MX", gender: "Female" },
+      ],
+    edgeSpeak: async (input) => {
+      state.edgeCalls.push(input)
+      return options.edgeAudio ?? Buffer.from("fake-mp3").toString("base64")
+    },
+  }
+
   const messageClient = {
     message: {
       list: async () => options.messages ?? { data: [] },
     },
+    rpc: () => rpcClient,
   }
 
   const added = []
