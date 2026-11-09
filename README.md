@@ -3,11 +3,15 @@
 Plugin de [OpenCode](https://opencode.ai) V2 que añade voz a la app de
 escritorio:
 
-- **Dictado**: pulsas la píldora, hablas y el texto aparece en el prompt.
+- **Dictado**: pulsas la píldora y se abre el dictado de Windows 11 (Win+H),
+  que escribe en el prompt con su motor neuronal. También puedes usar el motor
+  offline `System.Speech` desde Ajustes.
 - **Lectura**: pulsa «Leer» y reproduce en voz alta la última respuesta.
 
-- **Dictado offline**: usa `System.Speech` de Windows, sin API keys ni internet.
-- **Sin portapapeles**: escribe con `composer.insert()` en la posición del
+- **Dictado preciso**: por defecto delega en Windows Voice Typing (Win+H).
+- **Modo offline**: `System.Speech` sigue disponible como alternativa sin
+  conexión y sin depender del dictado de Windows.
+- **Sin portapapeles**: la lectura usa `composer.insert()` en la posición del
   cursor, sin robar el foco ni simular `Ctrl+V`.
 - **Lectura local**: voces del sistema (`speechSynthesis`), con respaldo a
   `System.Speech.Synthesis` si Electron no expone voces.
@@ -59,6 +63,11 @@ experimental (`gui-experimental`) y puede cambiar entre versiones de OpenCode.
 
 El motor vive en el proceso `main` de Electron porque necesita
 `node:child_process`. La ventana solo pinta el estado y escribe el texto.
+
+Con el motor por defecto (`Windows Voice Typing`) el flujo es más corto: la
+píldora enfoca el composer, el proceso `main` envía `Win+H` con `keybd_event`, y
+Windows escribe directamente en el campo. El plugin no transcribe ni toca el
+texto.
 
 ## Requisitos
 
@@ -131,7 +140,8 @@ en cada cambio y OpenCode Desktop recarga el plugin solo.
 | Ajustes | Ajustes → Dictado por voz, o paleta: "Ajustes de dictado por voz" |
 
 La píldora del micrófono muestra el estado: `Dictar`, `Iniciando…`,
-`Escuchando…` (icono en rojo) y `Reintentar dictado` si algo falla.
+`Escuchando…` (System.Speech), `Dictando…` (Win+H) y `Reintentar dictado` si
+algo falla.
 
 La píldora «Leer» cambia a `Leyendo…`; un segundo clic detiene la lectura.
 Dictar detiene la lectura y leer detiene el dictado, para que el micrófono no
@@ -144,11 +154,13 @@ espacio, se añade uno de separación (configurable).
 
 | Ajuste | Por defecto | Qué hace |
 |---|---|---|
-| Idioma | `es-ES` | Reconocedor instalado en Windows. Si no existe el exacto, usa el mismo idioma base. |
-| Confianza mínima | 0,4 | Descarta resultados con menor confianza para evitar ruido. |
-| Espacio antes del texto | Sí | Separa el dictado de lo que ya hay escrito. |
-| Enfocar el prompt al terminar | Sí | Mueve el cursor al prompt tras cada frase. |
-| Probar micrófono | — | Lista los idiomas instalados y comprueba el micrófono. |
+| Motor de dictado | Windows Voice Typing (Win+H) | Usa el dictado de Windows 11, más preciso. `System.Speech` es la alternativa offline. |
+| Probar Win+H | — | Envía el atajo y comprueba que Windows abre su barra de dictado. |
+| Idioma | `es-ES` | Solo para `System.Speech`. Reconocedor instalado en Windows. Si no existe el exacto, usa el mismo idioma base. |
+| Confianza mínima | 0,4 | Solo para `System.Speech`. Descarta resultados con menor confianza. |
+| Espacio antes del texto | Sí | Solo para `System.Speech`. Separa el dictado de lo que ya hay escrito. |
+| Enfocar el prompt al terminar | Sí | Solo para `System.Speech`. Mueve el cursor al prompt tras cada frase. |
+| Probar micrófono | — | Solo para `System.Speech`. Lista los idiomas instalados y comprueba el micrófono. |
 
 ### Lectura en voz alta
 
@@ -180,7 +192,10 @@ bloqueas el micrófono, verás el aviso «No hay ningún micrófono disponible»
 
 | Síntoma | Causa / solución |
 |---|---|
-| «El idioma de reconocimiento es-ES no está instalado» | Instala el paquete de **reconocimiento** de voz, no solo el de visualización. El aviso muestra los idiomas disponibles. |
+| Al pulsar «Dictar» no aparece la barra de Windows | Abre Ajustes → Dictado por voz → **Probar Win+H**. Si tampoco aparece, revisa Configuración → Accesibilidad → Dictado por voz, y que Kaspersky no esté bloqueando la combinación sintética. |
+| Win+H se abre pero no escribe en el prompt | Haz clic en el cuadro de texto antes de dictar; el plugin enfoca el composer, pero otra ventana pudo robar el foco. |
+| Quiero dictado sin Win+H | Cambia **Motor de dictado** a `System.Speech (offline)`. |
+| «El idioma de reconocimiento es-ES no está instalado» | Solo afecta a `System.Speech`. Instala el paquete de **reconocimiento** de voz, no solo el de visualización. |
 | «Windows no tiene ningún reconocedor de voz instalado» | Mismo caso: no hay ningún idioma de voz instalado. |
 | «No hay ningún micrófono disponible» | Revisa Configuración → Sistema → Sonido → Entrada y el micrófono predeterminado. |
 | El motor se detiene inesperadamente | Otro proceso puede estar usando el micrófono en modo exclusivo. Ejecuta la prueba de micrófono en Ajustes. |
@@ -199,7 +214,12 @@ de la app muestran los más importantes.
   cambiar entre versiones de OpenCode.
 - `System.Speech` no añade puntuación ni mayúsculas automáticamente y su
   precisión es inferior a Whisper o al dictado nativo de Windows 11.
-- No hay resultados parciales: el texto aparece al terminar cada frase.
+- El modo Win+H envía la combinación con `keybd_event`. Kaspersky o la
+  protección UIPI de Windows pueden bloquearla; en ese caso usa `System.Speech`.
+- Con Win+H el texto lo escribe Windows en el campo enfocado: el plugin no
+  puede descartarlo si cambias de sesión ni limpiarlo.
+- No hay resultados parciales con `System.Speech`: el texto aparece al terminar
+  cada frase.
 - La lectura usa las voces del sistema; si Electron no las expone, el respaldo
   por PowerShell usa las voces SAPI, con una latencia de arranque de ~0,5 s.
 - La lectura empieza con el mensaje tal como esté en ese momento: si el agente

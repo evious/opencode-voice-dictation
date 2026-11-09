@@ -1,6 +1,6 @@
-import { createSignal, onMount } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
-import { Dictation } from "./contract"
+import { Dictation, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import type { Speaker } from "./speak"
 
@@ -27,7 +27,9 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const ui = ctx.ui
   const prefs = ctx.stores.prefs
   const speechPrefs = ctx.stores.speech
+  const enginePrefs = ctx.stores.engine
   const dictation = ctx.main(Dictation)
+  const voiceTyping = ctx.main(VoiceTyping)
 
   const [locales, setLocales] = createSignal<readonly string[]>([])
   const [busy, setBusy] = createSignal(false)
@@ -69,6 +71,29 @@ export function VoiceSettings(props: { speaker: Speaker }) {
       if (change.rate !== undefined) draft.rate = change.rate
       if (change.skipCode !== undefined) draft.skipCode = change.skipCode
     })
+  }
+
+  const patchEngine = (mode: string) => {
+    enginePrefs.update((draft) => {
+      draft.mode = mode
+    })
+  }
+
+  const testWinH = async () => {
+    try {
+      await voiceTyping.toggle()
+      ctx.toast.show({
+        variant: "default",
+        title: ctx.t("settings.winh"),
+        description: ctx.t("settings.winh.sent"),
+      })
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: cause instanceof Error ? cause.message : ctx.t("error.winh"),
+      })
+    }
   }
 
   const preview = async () => {
@@ -130,52 +155,80 @@ export function VoiceSettings(props: { speaker: Speaker }) {
     <ui.SettingsLayout title={ctx.t("settings.title")} description={ctx.t("settings.description")}>
       <ui.SettingsSection title={ctx.t("settings.section")}>
         <ui.SettingsRow
-          id="language"
-          title={ctx.t("settings.language")}
-          description={ctx.t("settings.language.description")}
+          id="engine"
+          title={ctx.t("settings.engine")}
+          description={ctx.t("settings.engine.description")}
         >
           <ui.Select
-            label={ctx.t("settings.language")}
-            value={prefs.value.locale}
-            options={localeOptions().length > 0 ? localeOptions() : FALLBACK_LOCALES.map((value) => ({ value, label: value }))}
-            onChange={(value) => patch({ locale: value })}
-          />
-        </ui.SettingsRow>
-
-        <ui.SettingsRow
-          id="confidence"
-          title={ctx.t("settings.confidence")}
-          description={ctx.t("settings.confidence.description")}
-        >
-          <ui.Select
-            label={ctx.t("settings.confidence")}
-            value={String(prefs.value.minConfidence)}
+            label={ctx.t("settings.engine")}
+            value={enginePrefs.value.mode}
             options={[
-              { value: "0.2", label: ctx.t("confidence.low") },
-              { value: "0.4", label: ctx.t("confidence.normal") },
-              { value: "0.6", label: ctx.t("confidence.high") },
+              { value: "windows", label: ctx.t("engine.windows") },
+              { value: "system", label: ctx.t("engine.system") },
             ]}
-            onChange={(value) => patch({ minConfidence: Number(value) || 0.4 })}
+            onChange={(value) => patchEngine(value)}
           />
         </ui.SettingsRow>
 
-        <ui.SettingsRow id="space" title={ctx.t("settings.space")} description={ctx.t("settings.space.description")}>
-          <ui.Switch
-            label={ctx.t("settings.space")}
-            hideLabel
-            checked={prefs.value.trailingSpace}
-            onChange={(checked) => patch({ trailingSpace: checked })}
-          />
-        </ui.SettingsRow>
+        <Show when={enginePrefs.value.mode === "windows"}>
+          <ui.SettingsRow
+            id="winh"
+            title={ctx.t("settings.winh")}
+            description={ctx.t("settings.winh.description")}
+          >
+            <ui.Button onClick={() => void testWinH()}>{ctx.t("settings.winh.run")}</ui.Button>
+          </ui.SettingsRow>
+        </Show>
 
-        <ui.SettingsRow id="focus" title={ctx.t("settings.focus")} description={ctx.t("settings.focus.description")}>
-          <ui.Switch
-            label={ctx.t("settings.focus")}
-            hideLabel
-            checked={prefs.value.autoFocus}
-            onChange={(checked) => patch({ autoFocus: checked })}
-          />
-        </ui.SettingsRow>
+        <Show when={enginePrefs.value.mode === "system"}>
+          <ui.SettingsRow
+            id="language"
+            title={ctx.t("settings.language")}
+            description={ctx.t("settings.language.description")}
+          >
+            <ui.Select
+              label={ctx.t("settings.language")}
+              value={prefs.value.locale}
+              options={localeOptions().length > 0 ? localeOptions() : FALLBACK_LOCALES.map((value) => ({ value, label: value }))}
+              onChange={(value) => patch({ locale: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="confidence"
+            title={ctx.t("settings.confidence")}
+            description={ctx.t("settings.confidence.description")}
+          >
+            <ui.Select
+              label={ctx.t("settings.confidence")}
+              value={String(prefs.value.minConfidence)}
+              options={[
+                { value: "0.2", label: ctx.t("confidence.low") },
+                { value: "0.4", label: ctx.t("confidence.normal") },
+                { value: "0.6", label: ctx.t("confidence.high") },
+              ]}
+              onChange={(value) => patch({ minConfidence: Number(value) || 0.4 })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow id="space" title={ctx.t("settings.space")} description={ctx.t("settings.space.description")}>
+            <ui.Switch
+              label={ctx.t("settings.space")}
+              hideLabel
+              checked={prefs.value.trailingSpace}
+              onChange={(checked) => patch({ trailingSpace: checked })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow id="focus" title={ctx.t("settings.focus")} description={ctx.t("settings.focus.description")}>
+            <ui.Switch
+              label={ctx.t("settings.focus")}
+              hideLabel
+              checked={prefs.value.autoFocus}
+              onChange={(checked) => patch({ autoFocus: checked })}
+            />
+          </ui.SettingsRow>
+        </Show>
       </ui.SettingsSection>
 
       <ui.SettingsSection title={ctx.t("speech.section")}>

@@ -55,8 +55,7 @@ export interface DiagnoseResult {
  * Text-to-speech bridge. The window speaks with `speechSynthesis` when the
  * Electron build exposes voices, and falls back to this main-process engine
  * (`System.Speech.Synthesis`) when it does not.
- */
-export const Speech = Ipc.define({
+ */export const Speech = Ipc.define({
   id: "voice-dictation.speech",
   methods: {
     speak: {
@@ -73,5 +72,16 @@ export const Speech = Ipc.define({
   },
   events: {
     done: Schema.Struct({ ok: Schema.Boolean }),
+  },
+})
+
+/**
+ * Windows 11 voice typing. The window focuses the composer and asks main to
+ * press Win+H; Windows writes the text straight into the focused field.
+ */
+export const VoiceTyping = Ipc.define({
+  id: "voice-dictation.voice-typing",
+  methods: {
+    toggle: {},
   },
 })

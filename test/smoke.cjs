@@ -109,7 +109,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 function host(options = {}) {
   const listeners = {}
   const speechListeners = {}
-  const state = { provider: undefined, speech: undefined, changed: 0 }
+  const state = { provider: undefined, speech: undefined, changed: 0, voiceTypingCalls: 0 }
   const inserted = []
   const toasts = []
   const spokenFallback = []
@@ -151,6 +151,12 @@ function host(options = {}) {
     },
   }
 
+  const voiceTypingClient = {
+    toggle: async () => {
+      state.voiceTypingCalls++
+    },
+  }
+
   const messageClient = {
     message: {
       list: async () => options.messages ?? { data: [] },
@@ -170,7 +176,11 @@ function host(options = {}) {
     },
     provide: () => () => {},
     use: () => () => ({ status: "inactive" }),
-    main: (token) => (token.id === "voice-dictation.speech" ? speechClient : dictationClient),
+    main: (token) => {
+      if (token.id === "voice-dictation.speech") return speechClient
+      if (token.id === "voice-dictation.voice-typing") return voiceTypingClient
+      return dictationClient
+    },
     t: (key, params) => (params ? `${key} ${JSON.stringify(params)}` : key),
     plural: (key, count) => `${key} ${count}`,
     layout: { settings: () => {} },
@@ -199,6 +209,12 @@ function host(options = {}) {
         update: () => {},
         set: () => {},
       },
+      engine: {
+        value: { mode: options.engine ?? "system" },
+        ready: () => true,
+        update: () => {},
+        set: () => {},
+      },
     },
     toast: { show: (entry) => toasts.push(entry) },
     onCleanup: () => {},
@@ -211,6 +227,7 @@ function host(options = {}) {
     signal: new AbortController().signal,
     provide: (token, impl) => {
       if (token.id === "voice-dictation.speech") state.speech = impl
+      else if (token.id === "voice-dictation.voice-typing") state.voiceTyping = impl
       else state.provider = impl
       return providerApi
     },
@@ -335,6 +352,29 @@ async function run() {
     const h = host()
     const result = await h.dictationClient.diagnose()
     if (!result.microphone || result.locales.length !== 2) throw new Error(JSON.stringify(result))
+  })
+
+  await test("windows mode focuses the composer and toggles Win+H", async () => {
+    use("ok")
+    installWebSpeech()
+    const h = host({ engine: "windows" })
+    const pill = h.pill()
+    if (!pill) throw new Error("pill missing")
+    if (pill.show({}).label !== "pill.idle") throw new Error("unexpected idle label")
+
+    pill.show({}).run()
+    await sleep(50)
+
+    if (h.state.voiceTypingCalls !== 1) throw new Error(`calls ${h.state.voiceTypingCalls}`)
+    if (!h.state.focused) throw new Error("composer was not focused")
+    if (h.dictationClient.state().status !== "idle") throw new Error("offline engine started")
+    if (pill.show({}).label !== "pill.dictating") throw new Error(`label ${pill.show({}).label}`)
+
+    pill.show({}).run()
+    await sleep(50)
+
+    if (h.state.voiceTypingCalls !== 2) throw new Error(`calls ${h.state.voiceTypingCalls}`)
+    if (pill.show({}).label !== "pill.idle") throw new Error("did not return to idle")
   })
 
   await test("reads the last message without code or markdown", async () => {

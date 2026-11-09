@@ -1,5 +1,6 @@
+import { createSignal } from "solid-js"
 import { Command, ComposerPill, SettingsPage, type ComposerPillView, type Plugin } from "@opencode/plugin/gui"
-import { Dictation, Speech } from "./contract"
+import { Dictation, Speech, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import { createSpeaker } from "./speak"
 import { VoiceSettings } from "./settings"
@@ -11,8 +12,11 @@ import { VoiceSettings } from "./settings"
 export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const dictation = ctx.main(Dictation)
   const speech = ctx.main(Speech)
+  const voiceTyping = ctx.main(VoiceTyping)
   const speaker = createSpeaker(ctx, speech)
   const prefs = ctx.stores.prefs
+  const engine = ctx.stores.engine
+  const [windowsActive, setWindowsActive] = createSignal(false)
 
   let targetSession: string | undefined
 
@@ -37,6 +41,10 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   const start = () => {
+    if (windowsActive()) {
+      setWindowsActive(false)
+      void voiceTyping.toggle().catch(() => {})
+    }
     speaker.cancel()
     targetSession = ctx.sessions.current()?.key
     void dictation
@@ -54,7 +62,30 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     void dictation.stop().catch(() => {})
   }
 
+  const toggleWindows = () => {
+    speaker.cancel()
+    ctx.screen.current()?.composer.focus()
+
+    void voiceTyping
+      .toggle()
+      .then(() => setWindowsActive((value) => !value))
+      .catch((cause: unknown) => {
+        setWindowsActive(false)
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description:
+            cause instanceof Error ? `${ctx.t("error.winh")} ${cause.message}` : ctx.t("error.winh"),
+        })
+      })
+  }
+
   const toggle = () => {
+    if (engine.value.mode === "windows") {
+      toggleWindows()
+      return
+    }
+
     const status = dictation.state()?.status ?? "idle"
     if (status === "starting" || status === "listening") stop()
     else start()
@@ -125,6 +156,23 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const view = (): ComposerPillView | undefined => {
     if (ctx.app.platform !== "desktop") return undefined
+
+    if (engine.value.mode === "windows") {
+      return windowsActive()
+        ? {
+            label: ctx.t("pill.dictating"),
+            icon: "outline-wave-audio",
+            tone: "danger",
+            title: ctx.t("pill.stop"),
+            run: toggle,
+          }
+        : {
+            label: ctx.t("pill.idle"),
+            icon: "outline-wave-audio",
+            title: ctx.t("pill.winH"),
+            run: toggle,
+          }
+    }
 
     const status = dictation.state()?.status ?? "idle"
 
@@ -225,6 +273,8 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     },
     get entries() {
       return [
+        { id: "engine", title: ctx.t("settings.engine"), keywords: "engine motor dictation dictado winh voz" },
+        { id: "winh", title: ctx.t("settings.winh"), keywords: "winh windows voice typing dictado" },
         { id: "language", title: ctx.t("settings.language"), keywords: "voice language idioma voz" },
         { id: "confidence", title: ctx.t("settings.confidence"), keywords: "voice confidence confianza" },
         { id: "test", title: ctx.t("settings.test"), keywords: "voice microphone microphone test microfono" },
