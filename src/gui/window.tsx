@@ -3,14 +3,44 @@ import {
   Command,
   ComposerPill,
   SettingsPage,
+  usePlugin,
   type ComposerPillRow,
   type ComposerPillView,
+  type IconName,
   type Plugin,
 } from "@opencode/plugin/gui"
 import { Dictation, Speech, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
-import { createSpeaker } from "./speak"
+import { createSpeaker, type Speaker } from "./speak"
 import { VoiceSettings } from "./settings"
+
+interface ReadAction {
+  id: string
+  label: string
+  icon: IconName
+  run: () => void
+}
+
+function ReadMenu(props: { actions: () => ReadAction[]; close: () => void }) {
+  const ctx = usePlugin<typeof definition>()
+
+  return (
+    <>
+      {props.actions().map((action) => (
+        <ctx.ui.Button
+          variant={action.id === "stop" ? "danger" : "neutral"}
+          icon={action.icon}
+          onClick={() => {
+            action.run()
+            props.close()
+          }}
+        >
+          {action.label}
+        </ctx.ui.Button>
+      ))}
+    </>
+  )
+}
 
 /**
  * Window setup: the microphone pill above the composer, the keybind and the
@@ -133,6 +163,30 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     })()
   }
 
+  const readActions = (): ReadAction[] => {
+    if (!speaker.speaking()) {
+      return [{ id: "start", label: ctx.t("read.idle"), icon: "outline-audio", run: read }]
+    }
+
+    const paused = speaker.paused()
+    const actions: ReadAction[] = [
+      { id: "restart", label: ctx.t("read.restart"), icon: "outline-reset", run: () => void speaker.restart() },
+    ]
+
+    if (speaker.canPause()) {
+      actions.push({
+        id: "pause",
+        label: paused ? ctx.t("read.resume") : ctx.t("read.pause"),
+        icon: "outline-audio",
+        run: () => speaker.togglePause(),
+      })
+    }
+
+    actions.push({ id: "stop", label: ctx.t("read.stop"), icon: "xmark-small", run: () => speaker.cancel() })
+
+    return actions
+  }
+
   dictation.on("final", (data) => {
     const current = ctx.sessions.current()?.key
 
@@ -210,53 +264,38 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     return { label: ctx.t("pill.idle"), icon: "outline-wave-audio", title: ctx.t("pill.title"), run: toggle }
   }
 
+  const readView = (): ComposerPillView | undefined => {
+    if (ctx.app.platform !== "desktop") return undefined
+
+    const speaking = speaker.speaking()
+    const paused = speaker.paused()
+    const rows: ComposerPillRow[] = speaking
+      ? readActions().map((action): ComposerPillRow => ({
+          id: action.id,
+          label: action.label,
+          icon: action.icon,
+          tone: action.id === "stop" ? "danger" : undefined,
+          run: action.run,
+        }))
+      : []
+
+    return {
+      label: speaking ? (paused ? ctx.t("read.paused") : ctx.t("read.speaking")) : ctx.t("read.idle"),
+      icon: "outline-audio",
+      tone: speaking ? "success" : undefined,
+      title: ctx.t("read.title"),
+      rows: rows.length > 0 ? rows : undefined,
+      run: speaking ? undefined : read,
+    }
+  }
+
   ctx.add(ComposerPill, () => ({ id: "dictate", show: () => view() }))
 
   ctx.add(ComposerPill, () => ({
     id: "read",
     order: 1,
-    show: (): ComposerPillView | undefined => {
-      if (ctx.app.platform !== "desktop") return undefined
-
-      if (!speaker.speaking()) {
-        return { label: ctx.t("read.idle"), icon: "outline-audio", title: ctx.t("read.title"), run: read }
-      }
-
-      const paused = speaker.paused()
-      const rows: ComposerPillRow[] = []
-
-      if (speaker.canPause()) {
-        rows.push({
-          id: "pause",
-          label: paused ? ctx.t("read.resume") : ctx.t("read.pause"),
-          icon: "outline-audio",
-          run: () => speaker.togglePause(),
-        })
-      }
-
-      rows.push({
-        id: "restart",
-        label: ctx.t("read.restart"),
-        icon: "outline-reset",
-        run: () => void speaker.restart(),
-      })
-
-      rows.push({
-        id: "stop",
-        label: ctx.t("read.stop"),
-        icon: "xmark-small",
-        tone: "danger",
-        run: () => speaker.cancel(),
-      })
-
-      return {
-        label: paused ? ctx.t("read.paused") : ctx.t("read.speaking"),
-        icon: "outline-audio",
-        tone: "success",
-        title: ctx.t("read.title"),
-        rows,
-      }
-    },
+    show: () => readView(),
+    menu: (input) => <ReadMenu actions={readActions} close={input.close} />,
   }))
 
   ctx.add(Command, (): Command => ({
