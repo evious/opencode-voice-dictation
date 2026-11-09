@@ -167,7 +167,7 @@ export function createSpeaker(
     synth()?.cancel()
     setPaused(false)
     setSpeaking(false)
-    void speech.stop().catch(() => {})
+    if (backend() === "sapi") void speech.stop().catch(() => {})
   }
 
   const canPause = () => backend() === "web"

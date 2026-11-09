@@ -125,7 +125,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 function host(options = {}) {
   const listeners = {}
   const speechListeners = {}
-  const state = { provider: undefined, speech: undefined, changed: 0, voiceTypingCalls: 0 }
+  const state = { provider: undefined, speech: undefined, changed: 0, voiceTypingCalls: 0, speechStopCalls: 0 }
   const inserted = []
   const toasts = []
   const spokenFallback = []
@@ -159,7 +159,9 @@ function host(options = {}) {
       spokenFallback.push(input)
       ;(speechListeners.done ?? []).forEach((fn) => fn({ ok: true }))
     },
-    stop: async () => {},
+    stop: async () => {
+      state.speechStopCalls++
+    },
     voices: async () => options.sapiVoices ?? [],
     on: (name, fn) => {
       ;(speechListeners[name] ??= []).push(fn)
@@ -410,6 +412,7 @@ async function run() {
     if (text.includes("console")) throw new Error(`code was read: ${JSON.stringify(speech.spoken)}`)
     if (text.includes("example.com")) throw new Error(`url was read: ${JSON.stringify(speech.spoken)}`)
     if (pill.show({}).label !== "read.idle") throw new Error("still marked as reading")
+    if (h.state.speechStopCalls !== 0) throw new Error(`unexpected speech.stop calls: ${h.state.speechStopCalls}`)
   })
 
   await test("the reading menu stops the speech", async () => {

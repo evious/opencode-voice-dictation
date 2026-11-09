@@ -124,7 +124,6 @@ export const main: Plugin.MainSetup = (ctx) => {
         talking.stop()
         talking = undefined
       }
-      speech.emit("done", { ok: true })
     },
 
     voices() {
