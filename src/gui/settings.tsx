@@ -27,6 +27,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const ui = ctx.ui
   const prefs = ctx.stores.prefs
   const speechPrefs = ctx.stores.speech
+  const ttsPrefs = ctx.stores.tts
   const enginePrefs = ctx.stores.engine
   const dictation = ctx.main(Dictation)
   const voiceTyping = ctx.main(VoiceTyping)
@@ -51,10 +52,24 @@ export function VoiceSettings(props: { speaker: Speaker }) {
     return merged.map((value) => ({ value, label: value }))
   }
 
-  const voiceOptions = () => [
-    { value: "", label: ctx.t("speech.voice.auto") },
-    ...props.speaker.voices().map((voice) => ({ value: voice.id, label: voice.label })),
-  ]
+  const voiceOptions = () => {
+    const list = props.speaker.voices().map((voice) => ({ value: voice.id, label: voice.label }))
+    if (ttsPrefs.value.engine === "edge") return list
+    return [{ value: "", label: ctx.t("speech.voice.auto") }, ...list]
+  }
+
+  const voiceValue = () =>
+    ttsPrefs.value.engine === "edge" ? ttsPrefs.value.voice : speechPrefs.value.voiceURI
+
+  const selectVoice = (value: string) => {
+    if (ttsPrefs.value.engine === "edge") {
+      ttsPrefs.update((draft) => {
+        draft.voice = value
+      })
+      return
+    }
+    patchSpeech({ voiceURI: value })
+  }
 
   const patch = (change: { locale?: string; minConfidence?: number; trailingSpace?: boolean; autoFocus?: boolean }) => {
     prefs.update((draft) => {
@@ -77,6 +92,13 @@ export function VoiceSettings(props: { speaker: Speaker }) {
     enginePrefs.update((draft) => {
       draft.mode = mode
     })
+  }
+
+  const patchTts = (engine: string) => {
+    ttsPrefs.update((draft) => {
+      draft.engine = engine
+    })
+    void props.speaker.refreshVoices()
   }
 
   const testWinH = async () => {
@@ -233,15 +255,31 @@ export function VoiceSettings(props: { speaker: Speaker }) {
 
       <ui.SettingsSection title={ctx.t("speech.section")}>
         <ui.SettingsRow
+          id="tts-engine"
+          title={ctx.t("speech.engine")}
+          description={ctx.t("speech.engine.description")}
+        >
+          <ui.Select
+            label={ctx.t("speech.engine")}
+            value={ttsPrefs.value.engine}
+            options={[
+              { value: "edge", label: ctx.t("speech.engine.edge") },
+              { value: "system", label: ctx.t("speech.engine.system") },
+            ]}
+            onChange={(value) => patchTts(value)}
+          />
+        </ui.SettingsRow>
+
+        <ui.SettingsRow
           id="voice"
           title={ctx.t("speech.voice")}
           description={ctx.t("speech.voice.description")}
         >
           <ui.Select
             label={ctx.t("speech.voice")}
-            value={speechPrefs.value.voiceURI}
+            value={voiceValue()}
             options={voiceOptions()}
-            onChange={(value) => patchSpeech({ voiceURI: value })}
+            onChange={(value) => selectVoice(value)}
           />
         </ui.SettingsRow>
 

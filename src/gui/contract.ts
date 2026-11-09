@@ -69,6 +69,24 @@ export interface DiagnoseResult {
     voices: {
       output: Schema.Array(Schema.String),
     },
+    edgeVoices: {
+      output: Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          label: Schema.String,
+          locale: Schema.String,
+          gender: Schema.String,
+        }),
+      ),
+    },
+    edgeSpeak: {
+      input: Schema.Struct({
+        text: Schema.String,
+        voice: Schema.String,
+        rate: Schema.Number,
+      }),
+      output: Schema.String,
+    },
   },
   events: {
     done: Schema.Struct({ ok: Schema.Boolean }),

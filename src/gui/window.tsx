@@ -349,6 +349,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         { id: "confidence", title: ctx.t("settings.confidence"), keywords: "voice confidence confianza" },
         { id: "test", title: ctx.t("settings.test"), keywords: "voice microphone microphone test microfono" },
         { id: "voice", title: ctx.t("speech.voice"), keywords: "read aloud voice voz lectura altavoz" },
+        { id: "tts-engine", title: ctx.t("speech.engine"), keywords: "voice engine motor edge neural sistema" },
         { id: "rate", title: ctx.t("speech.rate"), keywords: "read aloud speed velocidad lectura" },
         { id: "skip-code", title: ctx.t("speech.skipCode"), keywords: "read aloud code codigo lectura" },
         { id: "preview", title: ctx.t("speech.preview"), keywords: "read aloud test voice probar voz" },

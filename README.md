@@ -13,8 +13,8 @@ escritorio:
   conexión y sin depender del dictado de Windows.
 - **Sin portapapeles**: la lectura usa `composer.insert()` en la posición del
   cursor, sin robar el foco ni simular `Ctrl+V`.
-- **Lectura local**: voces del sistema (`speechSynthesis`), con respaldo a
-  `System.Speech.Synthesis` si Electron no expone voces.
+- **Lectura natural**: voces neuronales de Edge (45 en español), con respaldo
+  a las voces del sistema si no hay internet.
 - **Solo Windows**: la app declara `os: ["windows"]`; en otros sistemas aparece
   como no disponible en vez de fallar.
 
@@ -167,10 +167,15 @@ espacio, se añade uno de separación (configurable).
 
 | Ajuste | Por defecto | Qué hace |
 |---|---|---|
-| Voz | Automática | Voz del sistema; automática elige una en el idioma de la app. |
+| Motor de voz | Edge neural (online) | Voces neuronales de Edge, mucho más naturales. `Sistema` usa las voces SAPI instaladas, sin conexión. |
+| Voz | Ximena (es-ES) | 45 voces en español, agrupadas por acento (España, México, Argentina, Colombia, Chile…). |
 | Velocidad | 1× | 0,8×, 1×, 1,2× o 1,5×. |
 | Ignorar bloques de código | Sí | Lee solo la prosa; omite código, rutas y comandos. |
 | Probar voz | — | Lee una frase corta con la configuración actual. |
+
+Edge neural usa la API de lectura de Microsoft Edge: es gratis y no necesita
+clave, pero **requiere internet** y el texto se envía a Microsoft. Si falla, el
+plugin usa automáticamente la voz del sistema.
 
 La lectura limpia el Markdown antes de hablar: quita fences, backticks,
 negritas, encabezados, viñetas y convierte `[texto](url)` en `texto`. Trocea el

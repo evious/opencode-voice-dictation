@@ -40,6 +40,31 @@ process.env.PATH = `${fakeDir}:${process.env.PATH}`
 // Web Speech API stub. The bundle reads these lazily, so each test can reset them.
 const speech = { spoken: [], cancelled: 0, paused: 0, resumed: 0, autoEnd: true, voices: [] }
 
+const audioState = { instances: [], autoEnd: false }
+
+function installAudio(options = {}) {
+  audioState.instances = []
+  audioState.autoEnd = options.autoEnd ?? false
+
+  globalThis.Audio = class {
+    constructor(src) {
+      this.src = src
+      this.paused = false
+      audioState.instances.push(this)
+    }
+
+    play() {
+      this.paused = false
+      if (audioState.autoEnd) setTimeout(() => this.onended?.(), 0)
+      return Promise.resolve()
+    }
+
+    pause() {
+      this.paused = true
+    }
+  }
+}
+
 function installWebSpeech(options = {}) {
   speech.spoken = []
   speech.cancelled = 0
@@ -125,7 +150,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 function host(options = {}) {
   const listeners = {}
   const speechListeners = {}
-  const state = { provider: undefined, speech: undefined, changed: 0, voiceTypingCalls: 0, speechStopCalls: 0 }
+  const state = {
+    provider: undefined,
+    speech: undefined,
+    changed: 0,
+    voiceTypingCalls: 0,
+    speechStopCalls: 0,
+    edgeCalls: [],
+  }
   const inserted = []
   const toasts = []
   const spokenFallback = []
@@ -163,6 +195,15 @@ function host(options = {}) {
       state.speechStopCalls++
     },
     voices: async () => options.sapiVoices ?? [],
+    edgeVoices: async () =>
+      options.edgeVoices ?? [
+        { id: "es-ES-XimenaNeural", label: "es-ES · Ximena", locale: "es-ES", gender: "Female" },
+        { id: "es-MX-DaliaNeural", label: "es-MX · Dalia", locale: "es-MX", gender: "Female" },
+      ],
+    edgeSpeak: async (input) => {
+      state.edgeCalls.push(input)
+      return options.edgeAudio ?? Buffer.from("fake-mp3").toString("base64")
+    },
     on: (name, fn) => {
       ;(speechListeners[name] ??= []).push(fn)
       return () => {}
@@ -229,6 +270,12 @@ function host(options = {}) {
       },
       engine: {
         value: { mode: options.engine ?? "system" },
+        ready: () => true,
+        update: () => {},
+        set: () => {},
+      },
+      tts: {
+        value: { engine: options.ttsEngine ?? "system", voice: options.ttsVoice ?? "es-ES-XimenaNeural" },
         ready: () => true,
         update: () => {},
         set: () => {},
@@ -467,6 +514,39 @@ async function run() {
     const stop = (view.rows ?? []).find((row) => row.id === "stop")
     stop.run()
     if (pill.show({}).label !== "read.idle") throw new Error("did not stop")
+  })
+
+  await test("edge engine synthesizes and plays with pause and stop", async () => {
+    use("ok")
+    installWebSpeech()
+    installAudio({ autoEnd: false })
+    const h = host({
+      ttsEngine: "edge",
+      messages: { data: [{ type: "assistant", content: [{ type: "text", text: "Hola desde Edge." }] }] },
+    })
+    const pill = h.readPill()
+
+    pill.show({}).run()
+    await sleep(100)
+
+    if (h.state.edgeCalls.length !== 1) throw new Error(`edge calls: ${h.state.edgeCalls.length}`)
+    if (h.state.edgeCalls[0].text !== "Hola desde Edge.") throw new Error(`text: ${h.state.edgeCalls[0].text}`)
+    if (audioState.instances.length !== 1) throw new Error(`audio instances: ${audioState.instances.length}`)
+    if (pill.show({}).label !== "read.speaking") throw new Error(`label: ${pill.show({}).label}`)
+
+    const pause = (pill.show({}).rows ?? []).find((row) => row.id === "pause")
+    if (!pause) throw new Error("pause row missing")
+    pause.run()
+    if (!audioState.instances[0].paused) throw new Error("audio not paused")
+    if (pill.show({}).label !== "read.paused") throw new Error("not marked as paused")
+
+    const resume = (pill.show({}).rows ?? []).find((row) => row.id === "pause")
+    resume.run()
+    if (audioState.instances[0].paused) throw new Error("audio not resumed")
+
+    const stop = (pill.show({}).rows ?? []).find((row) => row.id === "stop")
+    stop.run()
+    if (pill.show({}).label !== "read.idle") throw new Error("not stopped")
   })
 
   await test("no session explains why nothing is read", async () => {

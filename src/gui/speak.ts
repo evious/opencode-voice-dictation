@@ -11,7 +11,7 @@ export interface VoiceOption {
 export interface Speaker {
   speaking(): boolean
   paused(): boolean
-  backend(): "web" | "sapi" | "none"
+  backend(): "web" | "sapi" | "edge" | "none"
   canPause(): boolean
   voices(): VoiceOption[]
   refreshVoices(): Promise<void>
@@ -106,15 +106,19 @@ export function createSpeaker(
   speech: IpcClient<typeof Speech.spec>,
 ): Speaker {
   const prefs = ctx.stores.speech
+  const tts = ctx.stores.tts
 
   const [speaking, setSpeaking] = createSignal(false)
   const [paused, setPaused] = createSignal(false)
   const [voices, setVoices] = createSignal<VoiceOption[]>([])
-  const [backend, setBackend] = createSignal<"web" | "sapi" | "none">("none")
+  const [backend, setBackend] = createSignal<"web" | "sapi" | "edge" | "none">("none")
 
   let generation = 0
   let queue: string[] = []
   let lastText = ""
+  let currentAudio: HTMLAudioElement | undefined
+  let currentUrl: string | undefined
+  const edgeCache = new Map<string, string[]>()
 
   const synth = () =>
     typeof globalThis.speechSynthesis !== "undefined" ? globalThis.speechSynthesis : undefined
@@ -134,6 +138,19 @@ export function createSpeaker(
   }
 
   const refreshVoices = async () => {
+    if (tts.value.engine === "edge") {
+      try {
+        const list = await speech.edgeVoices()
+        if (list.length > 0) {
+          setVoices(list.map((voice) => ({ id: voice.id, label: voice.label })))
+          setBackend("edge")
+          return
+        }
+      } catch {
+        // No internet or Edge changed: fall back to the system voices.
+      }
+    }
+
     const available = synth()?.getVoices() ?? []
 
     if (available.length > 0) {
@@ -161,25 +178,49 @@ export function createSpeaker(
     setBackend("none")
   }
 
+  const stopAudio = () => {
+    if (currentAudio) {
+      currentAudio.onended = null
+      currentAudio.onerror = null
+      currentAudio.pause()
+      currentAudio = undefined
+    }
+    if (currentUrl) {
+      URL.revokeObjectURL(currentUrl)
+      currentUrl = undefined
+    }
+  }
+
   const cancel = () => {
     generation++
     queue = []
     synth()?.cancel()
+    stopAudio()
     setPaused(false)
     setSpeaking(false)
     if (backend() === "sapi") void speech.stop().catch(() => {})
   }
 
-  const canPause = () => backend() === "web"
+  const canPause = () => backend() === "web" || backend() === "edge"
 
   const pause = () => {
     if (!speaking() || paused() || !canPause()) return
+    if (backend() === "edge") {
+      currentAudio?.pause()
+      setPaused(true)
+      return
+    }
     synth()?.pause()
     setPaused(true)
   }
 
   const resume = () => {
     if (!speaking() || !paused() || !canPause()) return
+    if (backend() === "edge") {
+      void currentAudio?.play().catch(() => {})
+      setPaused(false)
+      return
+    }
     synth()?.resume()
     setPaused(false)
   }
@@ -194,6 +235,89 @@ export function createSpeaker(
     return speak(lastText)
   }
 
+  const speakEdge = (cleaned: string) => {
+    const voice = tts.value.voice || "es-ES-XimenaNeural"
+    const rate = prefs.value.rate
+    const blocks = chunkForSpeech(cleaned, 4000)
+    const key = `${voice}|${rate}|${cleaned}`
+    const cached = edgeCache.get(key) ?? []
+
+    edgeCache.clear()
+    edgeCache.set(key, cached)
+
+    const gen = generation
+    setSpeaking(true)
+    setPaused(false)
+
+    const play = (index: number) => {
+      if (gen !== generation) return
+      if (index >= blocks.length) {
+        setPaused(false)
+        setSpeaking(false)
+        return
+      }
+
+      void (async () => {
+        let encoded = cached[index]
+
+        try {
+          if (!encoded) {
+            encoded = await speech.edgeSpeak({ text: blocks[index] ?? "", voice, rate })
+            cached[index] = encoded
+          }
+        } catch {
+          if (gen === generation) {
+            setPaused(false)
+            setSpeaking(false)
+            ctx.toast.show({
+              variant: "error",
+              title: ctx.t("read.title"),
+              description: ctx.t("error.edge"),
+            })
+          }
+          return
+        }
+
+        if (gen !== generation) return
+
+        const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0))
+        const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }))
+
+        stopAudio()
+        currentUrl = url
+
+        const audio = new Audio(url)
+        currentAudio = audio
+        audio.onended = () => {
+          if (gen !== generation) return
+          stopAudio()
+          play(index + 1)
+        }
+        audio.onerror = () => {
+          if (gen !== generation) return
+          stopAudio()
+          setPaused(false)
+          setSpeaking(false)
+        }
+
+        await audio.play().catch(() => {
+          if (gen !== generation) return
+          stopAudio()
+          setPaused(false)
+          setSpeaking(false)
+          ctx.toast.show({
+            variant: "error",
+            title: ctx.t("read.title"),
+            description: ctx.t("error.edge"),
+          })
+        })
+      })()
+    }
+
+    play(0)
+    return true
+  }
+
   const speak = async (text: string) => {
     lastText = text
     const cleaned = cleanForSpeech(text, prefs.value.skipCode)
@@ -202,6 +326,9 @@ export function createSpeaker(
     cancel()
     await refreshVoices()
 
+    if (backend() === "edge") {
+      return speakEdge(cleaned)
+    }
     if (backend() === "web") {
       const engine = synth()
       if (!engine) return false

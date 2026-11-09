@@ -1,6 +1,6 @@
 {
   "name": "opencode-voice-dictation",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",
@@ -33,6 +33,10 @@
     "README.md",
     "LICENSE"
   ],
+  "dependencies": {
+    "msedge-tts": "^2.1.1",
+    "opencode-voice-dictation": "^0.2.0"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -51,8 +55,5 @@
     "typescript": "^5.9.0",
     "vite": "^7.3.0",
     "vite-plugin-solid": "^2.11.0"
-  },
-  "dependencies": {
-    "opencode-voice-dictation": "^0.2.0"
   }
 }
