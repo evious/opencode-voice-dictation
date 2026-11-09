@@ -14,6 +14,7 @@ export interface Speaker {
   backend(): "web" | "sapi" | "edge" | "none"
   engine(): "edge" | "system"
   voice(): string
+  error(): string
   canPause(): boolean
   setConfig(input: { engine?: string; voice?: string }): void
   voices(): VoiceOption[]
@@ -122,6 +123,7 @@ export function createSpeaker(
   const [speaking, setSpeaking] = createSignal(false)
   const [paused, setPaused] = createSignal(false)
   const [voices, setVoices] = createSignal<VoiceOption[]>([])
+  const [error, setError] = createSignal("")
   const [backend, setBackend] = createSignal<"web" | "sapi" | "edge" | "none">("none")
 
   let generation = 0
@@ -154,15 +156,18 @@ export function createSpeaker(
         const list = await speech.edgeVoices()
         if (list.length > 0) {
           setVoices(list.map((voice) => ({ id: voice.id, label: voice.label })))
+          setError("")
+        } else {
+          setError(ctx.t("speech.edge.error"))
         }
-      } catch {
-        // Keep the current list. The error surfaces when speaking, never as a
-        // silent switch to the system voice.
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause))
       }
       setBackend("edge")
       return
     }
 
+    setError("")
     const available = synth()?.getVoices() ?? []
 
     if (available.length > 0) {
@@ -444,6 +449,7 @@ export function createSpeaker(
     backend,
     engine,
     voice,
+    error,
     canPause,
     setConfig,
     voices,

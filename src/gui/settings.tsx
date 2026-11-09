@@ -286,6 +286,14 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           />
         </ui.SettingsRow>
 
+        <Show when={props.speaker.error()}>
+          <ui.SettingsRow
+            id="tts-error"
+            title={ctx.t("speech.edge.error")}
+            description={props.speaker.error()}
+          />
+        </Show>
+
         <ui.SettingsRow
           id="rate"
           title={ctx.t("speech.rate")}

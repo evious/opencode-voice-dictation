@@ -1,9 +1,11 @@
 /**
  * Edge neural text-to-speech.
  *
- * `msedge-tts` is loaded dynamically so the renderer process never evaluates
- * Node-only modules: only the Electron main process imports it.
+ * `msedge-tts` is Node-only. It is resolved at runtime from the plugin's own
+ * `node_modules`, only in the Electron main process.
  */
+import { createRequire } from "node:module"
+
 type EdgeModule = typeof import("msedge-tts")
 
 export interface EdgeVoiceInfo {
@@ -25,9 +27,16 @@ let cached: EdgeModule | undefined
 function load(): EdgeModule {
   if (cached) return cached
 
-  // Node-only package: Vite must not bundle it. Resolve it at runtime in the
-  // Electron main process, where `require` is real.
-  const runtimeRequire = eval("require") as NodeRequire
+  // Resolve from the bundle path. The app may evaluate the bundle with a
+  // `require` that points at its own directory, so `eval("require")` alone is
+  // not enough.
+  let runtimeRequire: NodeRequire
+  try {
+    runtimeRequire = createRequire(__filename)
+  } catch {
+    runtimeRequire = eval("require") as NodeRequire
+  }
+
   cached = runtimeRequire("msedge-tts") as EdgeModule
   return cached
 }
