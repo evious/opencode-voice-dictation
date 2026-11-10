@@ -1,7 +1,7 @@
 {
   "name": "opencode-voice-dictation",
-  "version": "0.6.2",
-  "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows",
+  "version": "0.7.0",
+  "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows and Linux",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",
   "homepage": "https://github.com/evious/opencode-voice-dictation#readme",
@@ -20,6 +20,8 @@
     "speech-to-text",
     "text-to-speech",
     "windows",
+    "linux",
+    "whisper.cpp",
     "offline"
   ],
   "type": "module",

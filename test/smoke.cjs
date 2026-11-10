@@ -189,6 +189,9 @@ function host(options = {}) {
     speechStopCalls: 0,
     edgeCalls: [],
     whisperCalls: [],
+    whisperCppCalls: [],
+    whisperCppInstallCalls: [],
+    capabilityCalls: 0,
   }
   const inserted = []
   const toasts = []
@@ -255,6 +258,30 @@ function host(options = {}) {
     },
     whisperStatus: async () =>
       options.whisperStatus ?? { ready: true, model: "large-v3-turbo", device: "cuda", error: "" },
+    capabilities: async () => {
+      state.capabilityCalls++
+      return (
+        options.capabilities ?? {
+          platform: "win32",
+          engines: ["windows", "system", "whisper"],
+        }
+      )
+    },
+    whisperCppInstall: async (input) => {
+      state.whisperCppInstallCalls.push(input)
+      return options.whisperCppInstall ?? { ok: true, model: input.model, error: "" }
+    },
+    whisperCppStatus: async () =>
+      options.whisperCppStatus ?? {
+        installed: true,
+        ready: false,
+        model: options.whisperCppModel ?? "base-q5_1",
+        error: "",
+      },
+    whisperCppTranscribe: async (input) => {
+      state.whisperCppCalls.push(input)
+      return options.whisperCppResult ?? { text: "texto whisper.cpp", language: "es" }
+    },
   }
 
   const messageClient = {
@@ -265,6 +292,7 @@ function host(options = {}) {
   }
 
   const added = []
+  const engineStore = { mode: options.engine ?? "system" }
   const windowCtx = {
     id: "voice-dictation",
     options: {},
@@ -311,10 +339,12 @@ function host(options = {}) {
         set: () => {},
       },
       engine: {
-        value: { mode: options.engine ?? "system" },
+        get value() {
+          return engineStore
+        },
         ready: () => true,
-        update: () => {},
-        set: () => {},
+        update: (mutator) => mutator(engineStore),
+        set: (value) => Object.assign(engineStore, value),
       },
       tts: {
         value: { engine: options.ttsEngine ?? "system", voice: options.ttsVoice ?? "es-ES-XimenaNeural" },
@@ -327,6 +357,15 @@ function host(options = {}) {
           python: options.whisperPython ?? "~/peopleby/voice_to_text/api_voice/demo/whisperx-env/bin/python",
           model: options.whisperModel ?? "large-v3-turbo",
           language: options.whisperLanguage ?? "",
+        },
+        ready: () => true,
+        update: () => {},
+        set: () => {},
+      },
+      whispercpp: {
+        value: {
+          model: options.whisperCppModel ?? "base-q5_1",
+          language: options.whisperCppLanguage ?? "auto",
         },
         ready: () => true,
         update: () => {},
@@ -363,6 +402,7 @@ function host(options = {}) {
     spokenFallback,
     state,
     dictationClient,
+    engineMode: () => engineStore.mode,
     switchSession: () => (currentKey = "session-b"),
     pill: () => added.find((item) => item && item.id === "dictate" && typeof item.show === "function"),
     readPill: () => added.find((item) => item && item.id === "read" && typeof item.show === "function"),
@@ -619,6 +659,73 @@ async function run() {
     if (h.state.whisperCalls.length !== 1) throw new Error(`calls ${h.state.whisperCalls.length}`)
     if (h.inserted[0] !== " texto whisper") throw new Error(`inserted ${JSON.stringify(h.inserted)}`)
     if (pill.show({}).label !== "pill.idle") throw new Error("not idle after transcribing")
+  })
+
+  await test("linux capabilities switch the default engine to whisper.cpp", async () => {
+    use("ok")
+    installWebSpeech()
+    const h = host({
+      engine: "windows",
+      capabilities: { platform: "linux", engines: ["whispercpp"] },
+    })
+
+    await sleep(50)
+
+    if (h.state.capabilityCalls < 1) throw new Error("capabilities were not called")
+    if (h.engineMode() !== "whispercpp") throw new Error(`engine ${h.engineMode()}`)
+  })
+
+  await test("whisper.cpp mode records and inserts the transcript", async () => {
+    use("ok")
+    installWebSpeech()
+    installRecorder()
+    const h = host({
+      engine: "whispercpp",
+      capabilities: { platform: "linux", engines: ["whispercpp"] },
+      whisperCppResult: { text: "hola cpp", language: "es" },
+    })
+    const pill = h.pill()
+
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(100)
+
+    if (pill.show({}).label !== "pill.recording") throw new Error(`label ${pill.show({}).label}`)
+
+    pill.show({}).run()
+    await sleep(200)
+
+    if (h.state.whisperCppCalls.length !== 1) throw new Error(`calls ${h.state.whisperCppCalls.length}`)
+
+    const call = h.state.whisperCppCalls[0]
+    if (call.model !== "base-q5_1") throw new Error(`model ${call.model}`)
+    if (call.language !== "auto") throw new Error(`language ${call.language}`)
+    if (!call.audio) throw new Error("audio was not sent")
+    if (h.inserted[0] !== " hola cpp") throw new Error(`inserted ${JSON.stringify(h.inserted)}`)
+    if (pill.show({}).label !== "pill.idle") throw new Error("not idle after transcribing")
+  })
+
+  await test("whisper.cpp empty transcript does not insert anything", async () => {
+    use("ok")
+    installWebSpeech()
+    installRecorder()
+    const h = host({
+      engine: "whispercpp",
+      capabilities: { platform: "linux", engines: ["whispercpp"] },
+      whisperCppResult: { text: "   ", language: "es" },
+    })
+    const pill = h.pill()
+
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(150)
+
+    if (h.inserted.length !== 0) throw new Error(`inserted ${JSON.stringify(h.inserted)}`)
+    if (!h.toasts.some((entry) => entry.description === "whispercpp.empty")) {
+      throw new Error(`toasts ${JSON.stringify(h.toasts)}`)
+    }
   })
 
   await test("no session explains why nothing is read", async () => {

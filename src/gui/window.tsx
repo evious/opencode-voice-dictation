@@ -56,8 +56,27 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const prefs = ctx.stores.prefs
   const engine = ctx.stores.engine
   const whisper = ctx.stores.whisper
+  const whisperCpp = ctx.stores.whispercpp
   const [windowsActive, setWindowsActive] = createSignal(false)
   const [whisperState, setWhisperState] = createSignal<"idle" | "recording" | "transcribing">("idle")
+
+  // The server owns the OS: it decides which engines exist here. On Linux this
+  // switches the default to whisper.cpp and drops the Windows-only engines.
+  void ctx.client
+    .rpc(VoiceRpc)
+    .capabilities({})
+    .then((value) => {
+      const caps = value as { platform: string; engines: string[] }
+      if (!caps.engines.includes(engine.value.mode) && caps.engines.length > 0) {
+        engine.update((draft) => {
+          draft.mode = caps.engines[0] ?? "windows"
+        })
+      }
+    })
+    .catch(() => {})
+
+  const localMode = () =>
+    engine.value.mode === "whisper" || engine.value.mode === "whispercpp" ? engine.value.mode : undefined
 
   let targetSession: string | undefined
   let recording: Recording | undefined
@@ -122,7 +141,9 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       })
   }
 
-  const startWhisper = async () => {
+  const localError = () => ctx.t(localMode() === "whispercpp" ? "error.whispercpp" : "error.whisper")
+
+  const startLocal = async () => {
     if (whisperState() !== "idle") return
     speaker.cancel()
 
@@ -133,19 +154,19 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       ctx.toast.show({
         variant: "error",
         title: ctx.t("pill.title"),
-        description: cause instanceof Error ? cause.message : ctx.t("error.whisper"),
+        description: cause instanceof Error ? cause.message : localError(),
       })
     }
   }
 
-  const cancelWhisper = () => {
+  const cancelLocal = () => {
     const current = recording
     recording = undefined
     if (current) void current.stop().catch(() => {})
     setWhisperState("idle")
   }
 
-  const stopWhisper = async () => {
+  const stopLocal = async () => {
     const current = recording
     recording = undefined
 
@@ -155,22 +176,34 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
     }
 
     setWhisperState("transcribing")
+    const mode = localMode()
 
     try {
       const blob = await current.stop()
       const audio = await blobToBase64(blob)
-      const result = (await ctx.client.rpc(VoiceRpc).whisperTranscribe({
-        audio,
-        mime: blob.type,
-        language: whisper.value.language,
-        python: whisper.value.python,
-        model: whisper.value.model,
-      })) as { text: string; language: string }
+      const result = (mode === "whispercpp"
+        ? await ctx.client.rpc(VoiceRpc).whisperCppTranscribe({
+            audio,
+            mime: blob.type,
+            language: whisperCpp.value.language,
+            model: whisperCpp.value.model,
+          })
+        : await ctx.client.rpc(VoiceRpc).whisperTranscribe({
+            audio,
+            mime: blob.type,
+            language: whisper.value.language,
+            python: whisper.value.python,
+            model: whisper.value.model,
+          })) as { text: string; language: string }
 
       const text = result.text.trim()
 
       if (!text) {
-        ctx.toast.show({ variant: "default", title: ctx.t("pill.title"), description: ctx.t("whisper.empty") })
+        ctx.toast.show({
+          variant: "default",
+          title: ctx.t("pill.title"),
+          description: ctx.t(mode === "whispercpp" ? "whispercpp.empty" : "whisper.empty"),
+        })
         return
       }
 
@@ -185,7 +218,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       ctx.toast.show({
         variant: "error",
         title: ctx.t("pill.title"),
-        description: cause instanceof Error ? cause.message : ctx.t("error.whisper"),
+        description: cause instanceof Error ? cause.message : localError(),
       })
     } finally {
       setWhisperState("idle")
@@ -193,9 +226,9 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   const toggle = () => {
-    if (engine.value.mode === "whisper") {
-      if (whisperState() === "recording") void stopWhisper()
-      else if (whisperState() === "idle") void startWhisper()
+    if (localMode()) {
+      if (whisperState() === "recording") void stopLocal()
+      else if (whisperState() === "idle") void startLocal()
       return
     }
 
@@ -210,7 +243,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   const read = () => {
-    if (whisperState() === "recording") cancelWhisper()
+    if (whisperState() === "recording") cancelLocal()
 
     if (speaker.speaking()) {
       speaker.cancel()
@@ -318,7 +351,9 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
           }
     }
 
-    if (engine.value.mode === "whisper") {
+    if (engine.value.mode === "whisper" || engine.value.mode === "whispercpp") {
+      const title = ctx.t(engine.value.mode === "whispercpp" ? "pill.whispercpp" : "pill.whisper")
+
       if (whisperState() === "recording") {
         return {
           label: ctx.t("pill.recording"),
@@ -333,14 +368,14 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         return {
           label: ctx.t("pill.transcribing"),
           icon: "outline-audio",
-          title: ctx.t("pill.whisper"),
+          title,
         }
       }
 
       return {
         label: ctx.t("pill.idle"),
         icon: "outline-wave-audio",
-        title: ctx.t("pill.whisper"),
+        title,
         run: toggle,
       }
     }
@@ -464,6 +499,10 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         { id: "whisper-model", title: ctx.t("whisper.model"), keywords: "whisper model modelo" },
         { id: "whisper-language", title: ctx.t("whisper.language"), keywords: "whisper language idioma" },
         { id: "whisper-test", title: ctx.t("whisper.test"), keywords: "whisper check comprobar" },
+        { id: "whispercpp-model", title: ctx.t("whispercpp.model"), keywords: "whisper.cpp model modelo" },
+        { id: "whispercpp-language", title: ctx.t("whispercpp.language"), keywords: "whisper.cpp language idioma" },
+        { id: "whispercpp-install", title: ctx.t("whispercpp.install"), keywords: "whisper.cpp download descargar instalar" },
+        { id: "whispercpp-test", title: ctx.t("whispercpp.test"), keywords: "whisper.cpp check comprobar" },
         { id: "rate", title: ctx.t("speech.rate"), keywords: "read aloud speed velocidad lectura" },
         { id: "skip-code", title: ctx.t("speech.skipCode"), keywords: "read aloud code codigo lectura" },
         { id: "preview", title: ctx.t("speech.preview"), keywords: "read aloud test voice probar voz" },

@@ -31,23 +31,56 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const ttsPrefs = ctx.stores.tts
   const enginePrefs = ctx.stores.engine
   const whisperPrefs = ctx.stores.whisper
+  const whisperCppPrefs = ctx.stores.whispercpp
   const dictation = ctx.main(Dictation)
   const voiceTyping = ctx.main(VoiceTyping)
 
   const [locales, setLocales] = createSignal<readonly string[]>([])
   const [busy, setBusy] = createSignal(false)
   const [whisperBusy, setWhisperBusy] = createSignal(false)
+  const [whisperCppBusy, setWhisperCppBusy] = createSignal(false)
+  const [whisperCppCheckBusy, setWhisperCppCheckBusy] = createSignal(false)
+  const [platform, setPlatform] = createSignal("")
 
   onMount(() => {
     props.speaker.setConfig({ engine: ttsPrefs.value.engine, voice: ttsPrefs.value.voice })
-    void dictation
-      .diagnose()
-      .then((result) => {
-        if (result.locales.length > 0) setLocales(result.locales)
+
+    const loadLocales = () => {
+      void dictation
+        .diagnose()
+        .then((result) => {
+          if (result.locales.length > 0) setLocales(result.locales)
+        })
+        .catch(() => {})
+    }
+
+    void ctx.client
+      .rpc(VoiceRpc)
+      .capabilities({})
+      .then((value) => {
+        const caps = value as { platform: string; engines: string[] }
+        setPlatform(caps.platform)
+        if (!caps.engines.includes(enginePrefs.value.mode) && caps.engines.length > 0) {
+          patchEngine(caps.engines[0] ?? "windows")
+        }
+        if (caps.platform !== "linux") loadLocales()
       })
-      .catch(() => {})
+      .catch(() => loadLocales())
+
     void props.speaker.refreshVoices()
   })
+
+  const engineOptions = () => {
+    if (platform() === "linux") {
+      return [{ value: "whispercpp", label: ctx.t("engine.whispercpp") }]
+    }
+
+    return [
+      { value: "windows", label: ctx.t("engine.windows") },
+      { value: "system", label: ctx.t("engine.system") },
+      { value: "whisper", label: ctx.t("engine.whisper") },
+    ]
+  }
 
   const localeOptions = () => {
     const list = locales()
@@ -105,6 +138,88 @@ export function VoiceSettings(props: { speaker: Speaker }) {
       if (change.model !== undefined) draft.model = change.model
       if (change.language !== undefined) draft.language = change.language
     })
+  }
+
+  const patchWhisperCpp = (change: { model?: string; language?: string }) => {
+    whisperCppPrefs.update((draft) => {
+      if (change.model !== undefined) draft.model = change.model
+      if (change.language !== undefined) draft.language = change.language
+    })
+  }
+
+  const installWhisperCpp = async () => {
+    setWhisperCppBusy(true)
+    try {
+      const result = (await ctx.client.rpc(VoiceRpc).whisperCppInstall({
+        model: whisperCppPrefs.value.model,
+      })) as { ok: boolean; model: string; error: string }
+
+      if (result.ok) {
+        ctx.toast.show({
+          variant: "success",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.install.ok", { model: result.model }),
+        })
+      } else {
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.install.error", { error: result.error || "?" }),
+          persistent: true,
+        })
+      }
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: ctx.t("whispercpp.install.error", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+        persistent: true,
+      })
+    } finally {
+      setWhisperCppBusy(false)
+    }
+  }
+
+  const checkWhisperCpp = async () => {
+    setWhisperCppCheckBusy(true)
+    try {
+      const status = (await ctx.client.rpc(VoiceRpc).whisperCppStatus({
+        model: whisperCppPrefs.value.model,
+      })) as { installed: boolean; ready: boolean; model: string; error: string }
+
+      if (status.error && !status.installed) {
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.test.error", { error: status.error }),
+          persistent: true,
+        })
+      } else if (!status.installed) {
+        ctx.toast.show({
+          variant: "default",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.test.missing"),
+        })
+      } else {
+        ctx.toast.show({
+          variant: "success",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.test.ready", { model: status.model }),
+        })
+      }
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: ctx.t("whispercpp.test.error", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+      })
+    } finally {
+      setWhisperCppCheckBusy(false)
+    }
   }
 
   const testWhisper = async () => {
@@ -232,11 +347,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           <ui.Select
             label={ctx.t("settings.engine")}
             value={enginePrefs.value.mode}
-            options={[
-              { value: "windows", label: ctx.t("engine.windows") },
-              { value: "system", label: ctx.t("engine.system") },
-              { value: "whisper", label: ctx.t("engine.whisper") },
-            ]}
+            options={engineOptions()}
             onChange={(value) => patchEngine(value)}
           />
         </ui.SettingsRow>
@@ -306,6 +417,62 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           >
             <ui.Button busy={whisperBusy()} onClick={() => void testWhisper()}>
               {ctx.t("whisper.test.run")}
+            </ui.Button>
+          </ui.SettingsRow>
+        </Show>
+
+        <Show when={enginePrefs.value.mode === "whispercpp"}>
+          <ui.SettingsRow
+            id="whispercpp-model"
+            title={ctx.t("whispercpp.model")}
+            description={ctx.t("whispercpp.model.description")}
+          >
+            <ui.Select
+              label={ctx.t("whispercpp.model")}
+              value={whisperCppPrefs.value.model}
+              options={[
+                { value: "base-q5_1", label: "base-q5_1 · 57 MB" },
+                { value: "small-q5_1", label: "small-q5_1 · 180 MB" },
+              ]}
+              onChange={(value) => patchWhisperCpp({ model: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whispercpp-language"
+            title={ctx.t("whispercpp.language")}
+            description={ctx.t("whispercpp.language.description")}
+          >
+            <ui.Select
+              label={ctx.t("whispercpp.language")}
+              value={whisperCppPrefs.value.language}
+              options={[
+                { value: "auto", label: ctx.t("whispercpp.language.auto") },
+                { value: "es", label: "Español" },
+                { value: "en", label: "English" },
+                { value: "pt", label: "Português" },
+              ]}
+              onChange={(value) => patchWhisperCpp({ language: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whispercpp-install"
+            title={ctx.t("whispercpp.install")}
+            description={ctx.t("whispercpp.install.description")}
+          >
+            <ui.Button busy={whisperCppBusy()} onClick={() => void installWhisperCpp()}>
+              {ctx.t("whispercpp.install.run")}
+            </ui.Button>
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whispercpp-test"
+            title={ctx.t("whispercpp.test")}
+            description={ctx.t("whispercpp.test.description")}
+          >
+            <ui.Button busy={whisperCppCheckBusy()} onClick={() => void checkWhisperCpp()}>
+              {ctx.t("whispercpp.test.run")}
             </ui.Button>
           </ui.SettingsRow>
         </Show>
@@ -439,13 +606,15 @@ export function VoiceSettings(props: { speaker: Speaker }) {
         </ui.SettingsRow>
       </ui.SettingsSection>
 
-      <ui.SettingsSection title={ctx.t("settings.test.section")}>
-        <ui.SettingsRow id="test" title={ctx.t("settings.test")} description={ctx.t("settings.test.description")}>
-          <ui.Button busy={busy()} onClick={() => void test()}>
-            {ctx.t("settings.test.run")}
-          </ui.Button>
-        </ui.SettingsRow>
-      </ui.SettingsSection>
+      <Show when={platform() !== "linux"}>
+        <ui.SettingsSection title={ctx.t("settings.test.section")}>
+          <ui.SettingsRow id="test" title={ctx.t("settings.test")} description={ctx.t("settings.test.description")}>
+            <ui.Button busy={busy()} onClick={() => void test()}>
+              {ctx.t("settings.test.run")}
+            </ui.Button>
+          </ui.SettingsRow>
+        </ui.SettingsSection>
+      </Show>
     </ui.SettingsLayout>
   )
 }

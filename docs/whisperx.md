@@ -6,7 +6,8 @@ de lectura.
 
 > Este motor es **avanzado**. Para un usuario sin WSL, Python y GPU NVIDIA, usa
 > `Windows Voice Typing (Win+H)` o un motor en la nube. La integración con
-> `whisper.cpp` nativo (sin WSL) está en el roadmap.
+> `whisper.cpp` nativo (sin WSL) ya está disponible para Linux; ver
+> [la guía de whisper.cpp](whispercpp.md).
 
 ## Requisitos
 
@@ -164,7 +165,7 @@ La idea es añadir más motores de dictado con la misma interfaz:
 | Windows Voice Typing (Win+H) | Disponible | Cero configuración, online |
 | System.Speech | Disponible | Offline, calidad antigua |
 | WhisperX local (WSL) | Disponible | Avanzado, NVIDIA + WSL |
-| `whisper.cpp` nativo | Planeado | Sin WSL/Python; binario + modelo |
+| `whisper.cpp` nativo | Disponible | Linux, sin WSL ni Python; ver [la guía](whispercpp.md) |
 | Google Cloud Speech-to-Text | Planeado | API key, online |
 | OpenAI (`gpt-4o-transcribe` / `whisper-1`) | Planeado | API key, online |
 | Deepgram / AssemblyAI | Planeado | API key, online |
