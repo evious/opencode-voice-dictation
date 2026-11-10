@@ -3,6 +3,7 @@ import { usePlugin } from "@opencode/plugin/gui"
 import { Dictation, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import type { Speaker } from "./speak"
+import { errorMessage } from "./errors"
 import { VoiceRpc } from "../rpc"
 
 const FALLBACK_LOCALES = [
@@ -40,7 +41,36 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const [whisperBusy, setWhisperBusy] = createSignal(false)
   const [whisperCppBusy, setWhisperCppBusy] = createSignal(false)
   const [whisperCppCheckBusy, setWhisperCppCheckBusy] = createSignal(false)
+  const [whisperCppFfmpegBusy, setWhisperCppFfmpegBusy] = createSignal(false)
+  const [ffmpeg, setFfmpeg] = createSignal<{ available: boolean; version: string } | undefined>(undefined)
   const [platform, setPlatform] = createSignal("")
+
+  type WhisperCppStatus = {
+    installed: boolean
+    ready: boolean
+    model: string
+    error: string
+    ffmpeg: boolean
+    ffmpegVersion: string
+    ffmpegPath: string
+  }
+
+  const readWhisperCppStatus = async (): Promise<WhisperCppStatus> => {
+    const status = (await ctx.client.rpc(VoiceRpc).whisperCppStatus({
+      model: whisperCppPrefs.value.model,
+    })) as WhisperCppStatus
+
+    setFfmpeg({ available: status.ffmpeg, version: status.ffmpegVersion })
+    return status
+  }
+
+  const ffmpegDescription = () => {
+    const status = ffmpeg()
+    if (!status) return ctx.t("whispercpp.ffmpeg.description")
+    return status.available
+      ? ctx.t("whispercpp.ffmpeg.ready", { version: status.version })
+      : ctx.t("whispercpp.ffmpeg.missing")
+  }
 
   onMount(() => {
     props.speaker.setConfig({ engine: ttsPrefs.value.engine, voice: ttsPrefs.value.voice })
@@ -64,6 +94,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           patchEngine(caps.engines[0] ?? "windows")
         }
         if (caps.platform !== "linux") loadLocales()
+        else void readWhisperCppStatus().catch(() => {})
       })
       .catch(() => loadLocales())
 
@@ -160,6 +191,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           title: ctx.t("pill.title"),
           description: ctx.t("whispercpp.install.ok", { model: result.model }),
         })
+        await readWhisperCppStatus().catch(() => {})
       } else {
         ctx.toast.show({
           variant: "error",
@@ -173,7 +205,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
         variant: "error",
         title: ctx.t("pill.title"),
         description: ctx.t("whispercpp.install.error", {
-          error: cause instanceof Error ? cause.message : String(cause),
+          error: errorMessage(cause, "?"),
         }),
         persistent: true,
       })
@@ -185,9 +217,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const checkWhisperCpp = async () => {
     setWhisperCppCheckBusy(true)
     try {
-      const status = (await ctx.client.rpc(VoiceRpc).whisperCppStatus({
-        model: whisperCppPrefs.value.model,
-      })) as { installed: boolean; ready: boolean; model: string; error: string }
+      const status = await readWhisperCppStatus()
 
       if (status.error) {
         ctx.toast.show({
@@ -202,6 +232,13 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           title: ctx.t("pill.title"),
           description: ctx.t("whispercpp.test.missing"),
         })
+      } else if (!status.ffmpeg) {
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.ffmpeg.missing"),
+          persistent: true,
+        })
       } else {
         ctx.toast.show({
           variant: "success",
@@ -214,11 +251,53 @@ export function VoiceSettings(props: { speaker: Speaker }) {
         variant: "error",
         title: ctx.t("pill.title"),
         description: ctx.t("whispercpp.test.error", {
-          error: cause instanceof Error ? cause.message : String(cause),
+          error: errorMessage(cause, "?"),
         }),
       })
     } finally {
       setWhisperCppCheckBusy(false)
+    }
+  }
+
+  const installFfmpeg = async () => {
+    setWhisperCppFfmpegBusy(true)
+    try {
+      const result = (await ctx.client.rpc(VoiceRpc).whisperCppInstallFfmpeg({})) as {
+        ok: boolean
+        error: string
+        command: string
+      }
+
+      if (result.ok) {
+        ctx.toast.show({
+          variant: "success",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.ffmpeg.install.ok"),
+        })
+        await readWhisperCppStatus()
+      } else {
+        const manual = result.command
+          ? ` ${ctx.t("whispercpp.ffmpeg.install.manual", { command: result.command })}`
+          : ""
+
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whispercpp.ffmpeg.install.error", { error: result.error || "?" }) + manual,
+          persistent: true,
+        })
+      }
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: ctx.t("whispercpp.ffmpeg.install.error", {
+          error: errorMessage(cause, "?"),
+        }),
+        persistent: true,
+      })
+    } finally {
+      setWhisperCppFfmpegBusy(false)
     }
   }
 
@@ -454,6 +533,23 @@ export function VoiceSettings(props: { speaker: Speaker }) {
               ]}
               onChange={(value) => patchWhisperCpp({ language: value })}
             />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whispercpp-ffmpeg"
+            title={ctx.t("whispercpp.ffmpeg")}
+            description={ffmpegDescription()}
+          >
+            <Show when={ffmpeg()?.available === false}>
+              <ui.Button busy={whisperCppFfmpegBusy()} onClick={() => void installFfmpeg()}>
+                {ctx.t("whispercpp.ffmpeg.install")}
+              </ui.Button>
+            </Show>
+            <Show when={ffmpeg()?.available !== false}>
+              <ui.Button onClick={() => void readWhisperCppStatus().catch(() => {})}>
+                {ctx.t("whispercpp.test.run")}
+              </ui.Button>
+            </Show>
           </ui.SettingsRow>
 
           <ui.SettingsRow

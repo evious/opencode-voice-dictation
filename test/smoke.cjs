@@ -191,6 +191,7 @@ function host(options = {}) {
     whisperCalls: [],
     whisperCppCalls: [],
     whisperCppInstallCalls: [],
+    whisperCppInstallFfmpegCalls: [],
     capabilityCalls: 0,
   }
   const inserted = []
@@ -271,15 +272,23 @@ function host(options = {}) {
       state.whisperCppInstallCalls.push(input)
       return options.whisperCppInstall ?? { ok: true, model: input.model, error: "" }
     },
+    whisperCppInstallFfmpeg: async () => {
+      state.whisperCppInstallFfmpegCalls.push(true)
+      return options.whisperCppInstallFfmpeg ?? { ok: true, error: "", command: "" }
+    },
     whisperCppStatus: async () =>
       options.whisperCppStatus ?? {
         installed: true,
         ready: false,
         model: options.whisperCppModel ?? "base-q5_1",
         error: "",
+        ffmpeg: options.ffmpeg ?? true,
+        ffmpegVersion: options.ffmpegVersion ?? "ffmpeg version 6.1",
+        ffmpegPath: options.ffmpeg === false ? "" : "ffmpeg",
       },
     whisperCppTranscribe: async (input) => {
       state.whisperCppCalls.push(input)
+      if (options.whisperCppError !== undefined) throw options.whisperCppError
       return options.whisperCppResult ?? { text: "texto whisper.cpp", language: "es" }
     },
   }
@@ -724,6 +733,50 @@ async function run() {
 
     if (h.inserted.length !== 0) throw new Error(`inserted ${JSON.stringify(h.inserted)}`)
     if (!h.toasts.some((entry) => entry.description === "whispercpp.empty")) {
+      throw new Error(`toasts ${JSON.stringify(h.toasts)}`)
+    }
+  })
+
+  await test("whisper.cpp shows the real RPC error instead of the generic one", async () => {
+    use("ok")
+    installWebSpeech()
+    installRecorder()
+    const h = host({
+      engine: "whispercpp",
+      capabilities: { platform: "linux", engines: ["whispercpp"] },
+      whisperCppError: { message: "fallo real del servidor" },
+    })
+    const pill = h.pill()
+
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(150)
+
+    if (!h.toasts.some((entry) => entry.description === "fallo real del servidor")) {
+      throw new Error(`toasts ${JSON.stringify(h.toasts)}`)
+    }
+  })
+
+  await test("a missing ffmpeg failure maps to a clear message", async () => {
+    use("ok")
+    installWebSpeech()
+    installRecorder()
+    const h = host({
+      engine: "whispercpp",
+      capabilities: { platform: "linux", engines: ["whispercpp"] },
+      whisperCppError: { message: "FFMPEG_MISSING: ffmpeg is required" },
+    })
+    const pill = h.pill()
+
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(50)
+    pill.show({}).run()
+    await sleep(150)
+
+    if (!h.toasts.some((entry) => entry.description === "error.ffmpeg")) {
       throw new Error(`toasts ${JSON.stringify(h.toasts)}`)
     }
   })

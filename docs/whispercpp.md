@@ -11,7 +11,10 @@ GPU.
 ## Requisitos
 
 - **OpenCode Desktop** en Linux (el plugin GUI no se carga en la consola/TUI).
-- **ffmpeg** en el `PATH`:
+- **ffmpeg obligatorio**. Sin ffmpeg no se puede convertir la grabación WebM a
+  WAV de 16 kHz y la transcripción falla. El plugin lo detecta y ofrece
+  **Instalar ffmpeg** en Ajustes; si no puede, muestra el comando. Instalación
+  manual:
   ```bash
   sudo apt update && sudo apt install -y ffmpeg
   ffmpeg -version
@@ -23,18 +26,38 @@ GPU.
 
 No hace falta Python, `cmake` ni GPU.
 
+## ffmpeg (obligatorio)
+
+`whisper-server` solo entiende WAV mono a 16 kHz. La ventana graba WebM/Opus,
+así que el plugin usa `ffmpeg` para convertir el audio antes de transcribir.
+
+- **Comprobación**: en Ajustes → Dictado por voz → whisper.cpp verás una fila
+  **ffmpeg** con la versión detectada o un aviso de que falta.
+- **Instalación desde el plugin**: pulsa **Instalar ffmpeg**. Se usa `pkexec`
+  para mostrar el diálogo de contraseña del sistema (no se guarda). Si `pkexec`
+  no está disponible, se intenta `sudo -n`; si tampoco, se muestra el comando
+  manual.
+- **Manual**:
+  ```bash
+  sudo apt update && sudo apt install -y ffmpeg
+  ```
+- **Otras distros**: `sudo dnf install -y ffmpeg`, `sudo pacman -S --noconfirm ffmpeg`
+  o `sudo zypper install -y ffmpeg`.
+
 ## Instalación desde el plugin
 
 1. Instala el plugin (`opencode plugin add opencode-voice-dictation`) y reinicia
    OpenCode Desktop.
 2. Abre **Ajustes → Dictado por voz**. En Linux el motor es
    `whisper.cpp (local, nativo)`.
-3. Elige el modelo:
+3. Comprueba la fila **ffmpeg**. Si falta, pulsa **Instalar ffmpeg** (o instálalo
+   a mano con `sudo apt install -y ffmpeg`).
+4. Elige el modelo:
    - `base-q5_1` (57 MB): el más ligero; recomendado para portátiles modestos.
    - `small-q5_1` (~180 MB): más preciso, consume más CPU y memoria.
-4. Pulsa **Descargar motor**. Se bajan el binario oficial y el modelo.
-5. Pulsa **Comprobar** para verificar que están instalados.
-6. Pulsa la píldora del micrófono, habla y vuelve a pulsarla: el texto se
+5. Pulsa **Descargar motor**. Se bajan el binario oficial y el modelo.
+6. Pulsa **Comprobar** para verificar que están instalados.
+7. Pulsa la píldora del micrófono, habla y vuelve a pulsarla: el texto se
    inserta en el prompt.
 
 La descarga se guarda en:
@@ -99,8 +122,9 @@ whisper-server (proceso persistente)
 | Motor de dictado | `whisper.cpp` en Linux | Único motor disponible en Linux. |
 | Modelo | `base-q5_1` | `base-q5_1` (57 MB) o `small-q5_1` (~180 MB). |
 | Idioma | Automático | Autodetección o `es`, `en`, `pt`. |
+| ffmpeg | — | Comprueba si está instalado y ofrece **Instalar ffmpeg**. Es obligatorio. |
 | Descargar motor | — | Baja el binario y el modelo seleccionado. |
-| Comprobar whisper.cpp | — | Indica si el servidor y el modelo están instalados. |
+| Comprobar whisper.cpp | — | Indica si el servidor, el modelo y ffmpeg están listos. |
 
 ## Rendimiento orientativo
 
@@ -120,7 +144,8 @@ va justo, quédate en `base-q5_1`.
 |---|---|
 | «Whisper.cpp is not installed» | Pulsa **Descargar motor** en Ajustes. |
 | La descarga falla | Revisa internet, proxy o firewall hacia GitHub y Hugging Face. |
-| `ffmpeg` no encontrado | `sudo apt install ffmpeg` y comprueba `ffmpeg -version`. |
+| `ffmpeg` no encontrado | Pulsa **Instalar ffmpeg** en Ajustes o ejecuta `sudo apt update && sudo apt install -y ffmpeg`. Comprueba con `ffmpeg -version`. |
+| «Falta ffmpeg» al dictar | Es obligatorio: sin él no se convierte el WebM a WAV. Instálalo desde Ajustes o con `sudo apt install -y ffmpeg`. |
 | El binario no arranca | `glibc` antigua o arquitectura distinta; compila `whisper.cpp` para tu sistema o usa Ubuntu 22.04+. |
 | Se queda en «Transcribiendo…» | Mira el toast y el log del servidor de OpenCode; suele ser `ffmpeg` o el binario. |
 | El RPC devuelve 400 | El plugin server no cargó: Ajustes → Extensiones → Plugins → **Reload**. |

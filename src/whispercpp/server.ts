@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { connect } from "node:net"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
@@ -22,11 +22,33 @@ export interface WhisperCppStatus {
   ready: boolean
   model: string
   error: string
+  ffmpeg: boolean
+  ffmpegVersion: string
+  ffmpegPath: string
 }
 
 export interface WhisperCppResult {
   text: string
   language: string
+}
+
+export interface FfmpegStatus {
+  available: boolean
+  version: string
+  path: string
+  error: string
+}
+
+export interface InstallFfmpegResult {
+  ok: boolean
+  error: string
+  command: string
+}
+
+interface RunResult {
+  code: number | null
+  stdout: string
+  stderr: string
 }
 
 function rootDir(): string {
@@ -76,6 +98,141 @@ function run(command: string, args: string[]): Promise<string> {
       else reject(new Error(stderr.trim() || `${command} exited with code ${code ?? "unknown"}`))
     })
   })
+}
+
+/** Runs a command and returns its output instead of throwing on a non-zero exit. */
+function runCapture(command: string, args: string[]): Promise<RunResult> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { windowsHide: true })
+    let stdout = ""
+    let stderr = ""
+
+    child.stdout?.setEncoding("utf8")
+    child.stdout?.on("data", (chunk: string) => {
+      stdout = (stdout + chunk).slice(-8000)
+    })
+    child.stderr?.setEncoding("utf8")
+    child.stderr?.on("data", (chunk: string) => {
+      stderr = (stderr + chunk).slice(-8000)
+    })
+
+    child.on("error", (cause) => {
+      resolve({ code: null, stdout, stderr: (stderr + errorText(cause)).slice(-8000) })
+    })
+    child.on("close", (code) => {
+      resolve({ code, stdout, stderr: stderr.slice(-8000) })
+    })
+  })
+}
+
+function errorText(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+
+function commandExists(command: string): boolean {
+  const path = process.env.PATH ?? ""
+
+  return path.split(":").some((directory) => {
+    try {
+      accessSync(join(directory || ".", command), constants.X_OK)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
+/** Checks that ffmpeg can run. ffmpeg converts the browser WebM to 16 kHz WAV. */
+export async function detectFfmpeg(): Promise<FfmpegStatus> {
+  const result = await runCapture("ffmpeg", ["-version"])
+
+  if (result.code === 0) {
+    const version =
+      result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.startsWith("ffmpeg version")) ?? "ffmpeg"
+
+    return { available: true, version, path: "ffmpeg", error: "" }
+  }
+
+  return {
+    available: false,
+    version: "",
+    path: "",
+    error: result.stderr.trim() || "ffmpeg not found in PATH",
+  }
+}
+
+/**
+ * Installs ffmpeg with the system package manager.
+ *
+ * Uses `pkexec` (the desktop's authentication dialog) so the user's password is
+ * never handled by the plugin. Falls back to passwordless `sudo -n` and, if
+ * neither works, returns the command the user can run manually.
+ */
+export async function installFfmpeg(): Promise<InstallFfmpegResult> {
+  const manual = "sudo apt update && sudo apt install -y ffmpeg"
+
+  if (process.platform !== "linux") {
+    return { ok: false, error: "Automatic ffmpeg installation is only available on Linux", command: manual }
+  }
+
+  const current = await detectFfmpeg()
+  if (current.available) {
+    return { ok: true, error: "", command: "" }
+  }
+
+  if (!commandExists("apt-get")) {
+    const command = commandExists("dnf")
+      ? "sudo dnf install -y ffmpeg"
+      : commandExists("pacman")
+        ? "sudo pacman -S --noconfirm ffmpeg"
+        : commandExists("zypper")
+          ? "sudo zypper install -y ffmpeg"
+          : manual
+
+    return { ok: false, error: "No supported package manager was found", command }
+  }
+
+  const install = "DEBIAN_FRONTEND=noninteractive apt-get install -y ffmpeg"
+  const updateAndInstall = `DEBIAN_FRONTEND=noninteractive apt-get update && ${install}`
+  const attempts: Array<{ command: string; args: string[] }> = []
+
+  if (commandExists("pkexec")) {
+    attempts.push({ command: "pkexec", args: ["sh", "-c", install] })
+    attempts.push({ command: "pkexec", args: ["sh", "-c", updateAndInstall] })
+  }
+
+  if (commandExists("sudo")) {
+    attempts.push({ command: "sudo", args: ["-n", "sh", "-c", install] })
+    attempts.push({ command: "sudo", args: ["-n", "sh", "-c", updateAndInstall] })
+  }
+
+  let lastError = ""
+
+  for (const attempt of attempts) {
+    const result = await runCapture(attempt.command, attempt.args)
+
+    if (result.code === 0) {
+      const after = await detectFfmpeg()
+      if (after.available) return { ok: true, error: "", command: "" }
+      lastError = after.error || "ffmpeg is still not available"
+      continue
+    }
+
+    lastError = result.stderr.trim() || `${attempt.command} exited with code ${result.code ?? "unknown"}`
+
+    // 126 is "dismissed/not authorized" in pkexec: do not ask for the password
+    // again just because the update-and-install fallback exists.
+    if (attempt.command === "pkexec" && (result.code === 126 || result.code === 127)) break
+  }
+
+  return {
+    ok: false,
+    error: lastError || "ffmpeg installation failed",
+    command: manual,
+  }
 }
 
 export async function installWhisperCpp(model: string): Promise<{ ok: boolean; model: string; error: string }> {
@@ -216,6 +373,14 @@ export class WhisperCppEngine {
     language: string
     model: string
   }): Promise<WhisperCppResult> {
+    const ffmpeg = await detectFfmpeg()
+
+    if (!ffmpeg.available) {
+      throw new Error(
+        `FFMPEG_MISSING: ffmpeg is required to convert the audio. Install it with: sudo apt install -y ffmpeg (${ffmpeg.error})`,
+      )
+    }
+
     const port = await this.ensure(input.model, input.language)
 
     const dir = join(tmpdir(), "opencode-voice-dictation")
@@ -228,7 +393,24 @@ export class WhisperCppEngine {
     writeFileSync(source, Buffer.from(input.audio, "base64"))
 
     try {
-      await run("ffmpeg", ["-y", "-loglevel", "error", "-i", source, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav])
+      try {
+        await run("ffmpeg", [
+          "-y",
+          "-loglevel",
+          "error",
+          "-i",
+          source,
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-c:a",
+          "pcm_s16le",
+          wav,
+        ])
+      } catch (cause) {
+        throw new Error(`ffmpeg failed: ${errorText(cause)}`)
+      }
 
       const form = new FormData()
       form.append("file", new Blob([new Uint8Array(readFileSync(wav))], { type: "audio/wav" }), "audio.wav")
@@ -251,8 +433,9 @@ export class WhisperCppEngine {
     }
   }
 
-  status(model: string): WhisperCppStatus {
+  async status(model: string): Promise<WhisperCppStatus> {
     const file = modelFile(model)
+    const ffmpeg = await detectFfmpeg()
     const installed = existsSync(binaryPath()) && existsSync(modelPath(file))
 
     return {
@@ -260,6 +443,9 @@ export class WhisperCppEngine {
       ready: this.state !== undefined && this.state.model === file,
       model: file,
       error: this.error,
+      ffmpeg: ffmpeg.available,
+      ffmpegVersion: ffmpeg.version,
+      ffmpegPath: ffmpeg.path,
     }
   }
 

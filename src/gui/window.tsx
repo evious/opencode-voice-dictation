@@ -14,6 +14,7 @@ import type { definition } from "./definition"
 import { createSpeaker, type Speaker } from "./speak"
 import { VoiceSettings } from "./settings"
 import { blobToBase64, startRecording, type Recording } from "./recorder"
+import { errorMessage } from "./errors"
 import { VoiceRpc } from "../rpc"
 
 interface ReadAction {
@@ -154,7 +155,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       ctx.toast.show({
         variant: "error",
         title: ctx.t("pill.title"),
-        description: cause instanceof Error ? cause.message : localError(),
+        description: errorMessage(cause, localError()),
       })
     }
   }
@@ -215,10 +216,11 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         composer.focus()
       }
     } catch (cause) {
+      const message = errorMessage(cause, localError())
       ctx.toast.show({
         variant: "error",
         title: ctx.t("pill.title"),
-        description: cause instanceof Error ? cause.message : localError(),
+        description: message.includes("FFMPEG_MISSING") ? ctx.t("error.ffmpeg") : message,
       })
     } finally {
       setWhisperState("idle")
@@ -501,6 +503,7 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         { id: "whisper-test", title: ctx.t("whisper.test"), keywords: "whisper check comprobar" },
         { id: "whispercpp-model", title: ctx.t("whispercpp.model"), keywords: "whisper.cpp model modelo" },
         { id: "whispercpp-language", title: ctx.t("whispercpp.language"), keywords: "whisper.cpp language idioma" },
+        { id: "whispercpp-ffmpeg", title: ctx.t("whispercpp.ffmpeg"), keywords: "whisper.cpp ffmpeg audio convertir" },
         { id: "whispercpp-install", title: ctx.t("whispercpp.install"), keywords: "whisper.cpp download descargar instalar" },
         { id: "whispercpp-test", title: ctx.t("whispercpp.test"), keywords: "whisper.cpp check comprobar" },
         { id: "rate", title: ctx.t("speech.rate"), keywords: "read aloud speed velocidad lectura" },

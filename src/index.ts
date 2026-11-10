@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import { listEdgeVoices, synthesizeEdge } from "./edge.js"
 import { VoiceRpc } from "./rpc.js"
 import { WhisperEngine } from "./whisper/server.js"
-import { installWhisperCpp, WhisperCppEngine } from "./whispercpp/server.js"
+import { installWhisperCpp, WhisperCppEngine, installFfmpeg } from "./whispercpp/server.js"
 
 /**
  * Server part of the plugin.
@@ -61,6 +61,7 @@ export default Plugin.define({
         const { model } = input as { model: string }
         return whisperCpp.status(model)
       },
+      whisperCppInstallFfmpeg: async () => installFfmpeg(),
       whisperCppTranscribe: async (input) => {
         return whisperCpp.transcribe(input as {
           audio: string

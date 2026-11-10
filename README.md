@@ -91,7 +91,13 @@ En Linux el flujo es distinto: la ventana graba con `getUserMedia` +
 
 **Linux (Ubuntu)**
 
-- OpenCode Desktop y `ffmpeg` instalados.
+- OpenCode Desktop.
+- **ffmpeg obligatorio**: convierte la grabación WebM a WAV. El plugin lo
+  detecta y ofrece **Instalar ffmpeg** en Ajustes; si no puede, muestra el
+  comando. Instalación manual:
+  ```bash
+  sudo apt install -y ffmpeg
+  ```
 - `glibc` compatible con el binario oficial de `whisper.cpp` (Ubuntu 22.04+).
 - Micrófono accesible por la app. El primer dictado descarga el binario
   (~10 MB) y el modelo (`base-q5_1`, 57 MB) desde Ajustes.
@@ -205,6 +211,7 @@ los propios ajustes. Los motores en la nube del roadmap solo pedirán una API ke
 | Comprobar WhisperX | — | Arranca el worker y valida GPU/modelo. |
 | Modelo (whisper.cpp) | `base-q5_1` | Solo Linux. `base-q5_1` (57 MB) o `small-q5_1` (180 MB, más preciso). |
 | Idioma (whisper.cpp) | Automático | Solo Linux. Autodetección o `es`, `en`, `pt`. |
+| ffmpeg | — | Solo Linux. Indica si está instalado y ofrece **Instalar ffmpeg** con el diálogo de contraseña del sistema. |
 | Descargar motor | — | Solo Linux. Baja el binario oficial y el modelo a `~/.local/share/opencode-voice-dictation`. |
 | Comprobar whisper.cpp | — | Solo Linux. Indica si el servidor y el modelo están instalados. |
 
@@ -255,7 +262,9 @@ bloqueas el micrófono, verás el aviso «No hay ningún micrófono disponible»
 
 En **Linux**, la app abre el micrófono con `getUserMedia`; el navegador/Electron
 puede pedir permiso la primera vez. El servidor solo ejecuta `ffmpeg` y el
-binario descargado.
+binario descargado. Si falta `ffmpeg` y pulsas **Instalar ffmpeg**, se ejecuta
+`pkexec`/`apt-get` con el diálogo de contraseña del sistema; el plugin nunca
+guarda esa contraseña.
 
 ## Solución de problemas
 
@@ -275,6 +284,7 @@ binario descargado.
 | «Abre una conversación para leer su último mensaje» | En Home o en un chat nuevo sin mensajes no hay respuesta que leer. |
 | WhisperX se queda en «Transcribiendo…» | El worker no arrancó. Mira el toast: ruta del Python, CUDA o token de Hugging Face. Guía: <https://github.com/evious/opencode-voice-dictation/blob/main/docs/whisperx.md>. |
 | whisper.cpp dice «not installed» | Entra en Ajustes → Dictado por voz → **Descargar motor**. Requiere internet la primera vez. |
+| Falta ffmpeg o falla la conversión del audio | Ajustes → Dictado por voz → whisper.cpp → **Instalar ffmpeg**, o ejecuta `sudo apt install -y ffmpeg`. El motor no puede transcribir sin ffmpeg. |
 | whisper.cpp falla al arrancar | Comprueba que `ffmpeg` está en el `PATH` (`ffmpeg -version`) y que el binario es compatible con tu `glibc` (Ubuntu 22.04+). |
 | whisper.cpp tarda mucho | Usa `base-q5_1` en portátiles modestos; `small-q5_1` necesita más CPU y memoria. La primera transcripción carga el modelo. |
 | El RPC devuelve 400 o no cargan las voces de Edge | El plugin server no cargó: Ajustes → Extensiones → Plugins → **Reload**, o reinicia el servicio. |
@@ -368,6 +378,7 @@ src/
     ├── definition.ts        os, stores, i18n es/en
     ├── contract.ts          Ipc: dictado y lectura
     ├── window.tsx           Píldoras, comandos e inserción de texto
+    ├── errors.ts            Extrae el mensaje real de los errores RPC
     ├── recorder.ts          getUserMedia + MediaRecorder para WhisperX/whisper.cpp
     ├── main.ts              Dictado Win+H / System.Speech y voz SAPI
     ├── speak.ts             Limpieza de Markdown, troceado, Edge y speechSynthesis
