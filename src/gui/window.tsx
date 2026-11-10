@@ -13,6 +13,8 @@ import { Dictation, Speech, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import { createSpeaker, type Speaker } from "./speak"
 import { VoiceSettings } from "./settings"
+import { blobToBase64, startRecording, type Recording } from "./recorder"
+import { VoiceRpc } from "../rpc"
 
 interface ReadAction {
   id: string
@@ -53,9 +55,12 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const speaker = createSpeaker(ctx, speech)
   const prefs = ctx.stores.prefs
   const engine = ctx.stores.engine
+  const whisper = ctx.stores.whisper
   const [windowsActive, setWindowsActive] = createSignal(false)
+  const [whisperState, setWhisperState] = createSignal<"idle" | "recording" | "transcribing">("idle")
 
   let targetSession: string | undefined
+  let recording: Recording | undefined
 
   const reason = (code: string, detail: string, available: readonly string[]) => {
     switch (code) {
@@ -117,7 +122,83 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
       })
   }
 
+  const startWhisper = async () => {
+    if (whisperState() !== "idle") return
+    speaker.cancel()
+
+    try {
+      recording = await startRecording()
+      setWhisperState("recording")
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: cause instanceof Error ? cause.message : ctx.t("error.whisper"),
+      })
+    }
+  }
+
+  const cancelWhisper = () => {
+    const current = recording
+    recording = undefined
+    if (current) void current.stop().catch(() => {})
+    setWhisperState("idle")
+  }
+
+  const stopWhisper = async () => {
+    const current = recording
+    recording = undefined
+
+    if (!current) {
+      setWhisperState("idle")
+      return
+    }
+
+    setWhisperState("transcribing")
+
+    try {
+      const blob = await current.stop()
+      const audio = await blobToBase64(blob)
+      const result = (await ctx.client.rpc(VoiceRpc).whisperTranscribe({
+        audio,
+        mime: blob.type,
+        language: whisper.value.language,
+        python: whisper.value.python,
+        model: whisper.value.model,
+      })) as { text: string; language: string }
+
+      const text = result.text.trim()
+
+      if (!text) {
+        ctx.toast.show({ variant: "default", title: ctx.t("pill.title"), description: ctx.t("whisper.empty") })
+        return
+      }
+
+      const composer = ctx.screen.current()?.composer
+      if (composer) {
+        const existing = composer.text()
+        const separator = existing.length > 0 && !/\s$/.test(existing) ? " " : ""
+        composer.insert(separator + text)
+        composer.focus()
+      }
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: cause instanceof Error ? cause.message : ctx.t("error.whisper"),
+      })
+    } finally {
+      setWhisperState("idle")
+    }
+  }
+
   const toggle = () => {
+    if (engine.value.mode === "whisper") {
+      if (whisperState() === "recording") void stopWhisper()
+      else if (whisperState() === "idle") void startWhisper()
+      return
+    }
+
     if (engine.value.mode === "windows") {
       toggleWindows()
       return
@@ -129,6 +210,8 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   const read = () => {
+    if (whisperState() === "recording") cancelWhisper()
+
     if (speaker.speaking()) {
       speaker.cancel()
       return
@@ -233,6 +316,33 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
             title: ctx.t("pill.winH"),
             run: toggle,
           }
+    }
+
+    if (engine.value.mode === "whisper") {
+      if (whisperState() === "recording") {
+        return {
+          label: ctx.t("pill.recording"),
+          icon: "outline-wave-audio",
+          tone: "danger",
+          title: ctx.t("pill.stop"),
+          run: toggle,
+        }
+      }
+
+      if (whisperState() === "transcribing") {
+        return {
+          label: ctx.t("pill.transcribing"),
+          icon: "outline-audio",
+          title: ctx.t("pill.whisper"),
+        }
+      }
+
+      return {
+        label: ctx.t("pill.idle"),
+        icon: "outline-wave-audio",
+        title: ctx.t("pill.whisper"),
+        run: toggle,
+      }
     }
 
     const status = dictation.state()?.status ?? "idle"
@@ -350,6 +460,10 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
         { id: "test", title: ctx.t("settings.test"), keywords: "voice microphone microphone test microfono" },
         { id: "voice", title: ctx.t("speech.voice"), keywords: "read aloud voice voz lectura altavoz" },
         { id: "tts-engine", title: ctx.t("speech.engine"), keywords: "voice engine motor edge neural sistema" },
+        { id: "whisper-python", title: ctx.t("whisper.python"), keywords: "whisper python venv entorno" },
+        { id: "whisper-model", title: ctx.t("whisper.model"), keywords: "whisper model modelo" },
+        { id: "whisper-language", title: ctx.t("whisper.language"), keywords: "whisper language idioma" },
+        { id: "whisper-test", title: ctx.t("whisper.test"), keywords: "whisper check comprobar" },
         { id: "rate", title: ctx.t("speech.rate"), keywords: "read aloud speed velocidad lectura" },
         { id: "skip-code", title: ctx.t("speech.skipCode"), keywords: "read aloud code codigo lectura" },
         { id: "preview", title: ctx.t("speech.preview"), keywords: "read aloud test voice probar voz" },

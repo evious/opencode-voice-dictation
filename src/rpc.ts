@@ -40,6 +40,51 @@ export const VoiceRpc = {
       },
       output: { type: "string" },
     },
+    whisperTranscribe: {
+      input: {
+        type: "object",
+        properties: {
+          audio: { type: "string" },
+          mime: { type: "string" },
+          language: { type: "string" },
+          python: { type: "string" },
+          model: { type: "string" },
+        },
+        required: ["audio", "mime", "language", "python", "model"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          language: { type: "string" },
+        },
+        required: ["text", "language"],
+        additionalProperties: false,
+      },
+    },
+    whisperStatus: {
+      input: {
+        type: "object",
+        properties: {
+          python: { type: "string" },
+          model: { type: "string" },
+        },
+        required: ["python", "model"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          ready: { type: "boolean" },
+          model: { type: "string" },
+          device: { type: "string" },
+          error: { type: "string" },
+        },
+        required: ["ready", "model", "device", "error"],
+        additionalProperties: false,
+      },
+    },
   },
   events: {},
 } as const satisfies Rpc.PortableDefinition

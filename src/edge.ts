@@ -1,5 +1,11 @@
-import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts"
+type EdgeModule = typeof import("msedge-tts")
 
+let modulePromise: Promise<EdgeModule> | undefined
+
+function load(): Promise<EdgeModule> {
+  modulePromise ??= import("msedge-tts")
+  return modulePromise
+}
 export interface EdgeVoiceInfo {
   id: string
   label: string
@@ -26,6 +32,7 @@ function shortName(voice: RawVoice): string {
 }
 
 export async function listEdgeVoices(): Promise<EdgeVoiceInfo[]> {
+  const { MsEdgeTTS } = await load()
   const tts = new MsEdgeTTS()
 
   try {
@@ -50,6 +57,7 @@ export async function synthesizeEdge(input: {
   voice: string
   rate: number
 }): Promise<string> {
+  const { MsEdgeTTS, OUTPUT_FORMAT } = await load()
   const tts = new MsEdgeTTS()
 
   try {

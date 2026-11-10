@@ -3,6 +3,7 @@ import { usePlugin } from "@opencode/plugin/gui"
 import { Dictation, VoiceTyping } from "./contract"
 import type { definition } from "./definition"
 import type { Speaker } from "./speak"
+import { VoiceRpc } from "../rpc"
 
 const FALLBACK_LOCALES = [
   "es-ES",
@@ -29,11 +30,13 @@ export function VoiceSettings(props: { speaker: Speaker }) {
   const speechPrefs = ctx.stores.speech
   const ttsPrefs = ctx.stores.tts
   const enginePrefs = ctx.stores.engine
+  const whisperPrefs = ctx.stores.whisper
   const dictation = ctx.main(Dictation)
   const voiceTyping = ctx.main(VoiceTyping)
 
   const [locales, setLocales] = createSignal<readonly string[]>([])
   const [busy, setBusy] = createSignal(false)
+  const [whisperBusy, setWhisperBusy] = createSignal(false)
 
   onMount(() => {
     props.speaker.setConfig({ engine: ttsPrefs.value.engine, voice: ttsPrefs.value.voice })
@@ -94,6 +97,48 @@ export function VoiceSettings(props: { speaker: Speaker }) {
     enginePrefs.update((draft) => {
       draft.mode = mode
     })
+  }
+
+  const patchWhisper = (change: { python?: string; model?: string; language?: string }) => {
+    whisperPrefs.update((draft) => {
+      if (change.python !== undefined) draft.python = change.python
+      if (change.model !== undefined) draft.model = change.model
+      if (change.language !== undefined) draft.language = change.language
+    })
+  }
+
+  const testWhisper = async () => {
+    setWhisperBusy(true)
+    try {
+      const status = (await ctx.client.rpc(VoiceRpc).whisperStatus({
+        python: whisperPrefs.value.python,
+        model: whisperPrefs.value.model,
+      })) as { ready: boolean; model: string; device: string; error: string }
+
+      if (status.ready) {
+        ctx.toast.show({
+          variant: "success",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whisper.test.ready", { model: status.model, device: status.device }),
+        })
+      } else {
+        ctx.toast.show({
+          variant: "error",
+          title: ctx.t("pill.title"),
+          description: ctx.t("whisper.test.error", { error: status.error || "?" }),
+        })
+      }
+    } catch (cause) {
+      ctx.toast.show({
+        variant: "error",
+        title: ctx.t("pill.title"),
+        description: ctx.t("whisper.test.error", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+      })
+    } finally {
+      setWhisperBusy(false)
+    }
   }
 
   const patchTts = (engine: string) => {
@@ -190,6 +235,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
             options={[
               { value: "windows", label: ctx.t("engine.windows") },
               { value: "system", label: ctx.t("engine.system") },
+              { value: "whisper", label: ctx.t("engine.whisper") },
             ]}
             onChange={(value) => patchEngine(value)}
           />
@@ -202,6 +248,65 @@ export function VoiceSettings(props: { speaker: Speaker }) {
             description={ctx.t("settings.winh.description")}
           >
             <ui.Button onClick={() => void testWinH()}>{ctx.t("settings.winh.run")}</ui.Button>
+          </ui.SettingsRow>
+        </Show>
+
+        <Show when={enginePrefs.value.mode === "whisper"}>
+          <ui.SettingsRow
+            id="whisper-python"
+            title={ctx.t("whisper.python")}
+            description={ctx.t("whisper.python.description")}
+          >
+            <ui.TextInput
+              label={ctx.t("whisper.python")}
+              value={whisperPrefs.value.python}
+              onInput={(value) => patchWhisper({ python: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whisper-model"
+            title={ctx.t("whisper.model")}
+            description={ctx.t("whisper.model.description")}
+          >
+            <ui.Select
+              label={ctx.t("whisper.model")}
+              value={whisperPrefs.value.model}
+              options={[
+                { value: "large-v3-turbo", label: "large-v3-turbo" },
+                { value: "large-v3", label: "large-v3" },
+                { value: "medium", label: "medium" },
+              ]}
+              onChange={(value) => patchWhisper({ model: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whisper-language"
+            title={ctx.t("whisper.language")}
+            description={ctx.t("whisper.language.description")}
+          >
+            <ui.Select
+              label={ctx.t("whisper.language")}
+              value={whisperPrefs.value.language}
+              options={[
+                { value: "", label: ctx.t("whisper.language.auto") },
+                { value: "es", label: "Español" },
+                { value: "en", label: "English" },
+                { value: "pt", label: "Português" },
+              ]}
+              onChange={(value) => patchWhisper({ language: value })}
+            />
+          </ui.SettingsRow>
+
+          <ui.SettingsRow
+            id="whisper-test"
+            title={ctx.t("whisper.test")}
+            description={ctx.t("whisper.test.description")}
+          >
+            <ui.Button busy={whisperBusy()} onClick={() => void testWhisper()}>
+              {ctx.t("whisper.test.run")}
+            </ui.Button>
           </ui.SettingsRow>
         </Show>
 

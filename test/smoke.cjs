@@ -124,6 +124,34 @@ function uninstallWebSpeech() {
   }
 }
 
+function installRecorder() {
+  const stream = { getTracks: () => [{ stop() {} }] }
+
+  Object.defineProperty(globalThis, "navigator", {
+    value: { mediaDevices: { getUserMedia: async () => stream } },
+    configurable: true,
+  })
+
+  globalThis.MediaRecorder = class {
+    static isTypeSupported() {
+      return true
+    }
+
+    constructor(_stream, options) {
+      this.mimeType = options?.mimeType
+      this.ondataavailable = null
+      this.onstop = null
+    }
+
+    start() {}
+
+    stop() {
+      this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3])], { type: this.mimeType }) })
+      this.onstop?.()
+    }
+  }
+}
+
 const Module = require("node:module")
 const originalLoad = Module._load
 const fakeGui = {
@@ -160,6 +188,7 @@ function host(options = {}) {
     voiceTypingCalls: 0,
     speechStopCalls: 0,
     edgeCalls: [],
+    whisperCalls: [],
   }
   const inserted = []
   const toasts = []
@@ -220,6 +249,12 @@ function host(options = {}) {
       state.edgeCalls.push(input)
       return options.edgeAudio ?? Buffer.from("fake-mp3").toString("base64")
     },
+    whisperTranscribe: async (input) => {
+      state.whisperCalls.push(input)
+      return options.whisperResult ?? { text: "texto whisper", language: "es" }
+    },
+    whisperStatus: async () =>
+      options.whisperStatus ?? { ready: true, model: "large-v3-turbo", device: "cuda", error: "" },
   }
 
   const messageClient = {
@@ -283,6 +318,16 @@ function host(options = {}) {
       },
       tts: {
         value: { engine: options.ttsEngine ?? "system", voice: options.ttsVoice ?? "es-ES-XimenaNeural" },
+        ready: () => true,
+        update: () => {},
+        set: () => {},
+      },
+      whisper: {
+        value: {
+          python: options.whisperPython ?? "~/peopleby/voice_to_text/api_voice/demo/whisperx-env/bin/python",
+          model: options.whisperModel ?? "large-v3-turbo",
+          language: options.whisperLanguage ?? "",
+        },
         ready: () => true,
         update: () => {},
         set: () => {},
@@ -554,6 +599,26 @@ async function run() {
     const stop = (pill.show({}).rows ?? []).find((row) => row.id === "stop")
     stop.run()
     if (pill.show({}).label !== "read.idle") throw new Error("not stopped")
+  })
+
+  await test("whisper mode records and inserts the transcript", async () => {
+    use("ok")
+    installWebSpeech()
+    installRecorder()
+    const h = host({ engine: "whisper", text: "Hola" })
+    const pill = h.pill()
+
+    pill.show({}).run()
+    await sleep(100)
+
+    if (pill.show({}).label !== "pill.recording") throw new Error(`label ${pill.show({}).label}`)
+
+    pill.show({}).run()
+    await sleep(200)
+
+    if (h.state.whisperCalls.length !== 1) throw new Error(`calls ${h.state.whisperCalls.length}`)
+    if (h.inserted[0] !== " texto whisper") throw new Error(`inserted ${JSON.stringify(h.inserted)}`)
+    if (pill.show({}).label !== "pill.idle") throw new Error("not idle after transcribing")
   })
 
   await test("no session explains why nothing is read", async () => {
