@@ -42,7 +42,10 @@ function toWslPath(path: string): string {
 
 function spawnWorker(python: string, model: string): ChildProcess {
   const env = { ...process.env, WHISPER_MODEL: model, WHISPER_DEVICE: "cuda" }
-  const command = `"${python}" "${toWslPath(workerPath())}"`
+
+  // Inside `bash -lc`, a quoted `~` does not expand. Use $HOME instead.
+  const pythonArg = python.startsWith("~/") ? `"$HOME/${python.slice(2)}"` : `"${python}"`
+  const command = `${pythonArg} "${toWslPath(workerPath())}"`
 
   if (process.platform === "win32") {
     return spawn("wsl.exe", ["-d", "Ubuntu-22.04", "-e", "bash", "-lc", command], {
@@ -119,14 +122,25 @@ export class WhisperEngine {
 
     child.on("close", (code) => {
       clearTimeout(timer)
-      if (this.status.ready) {
+      const detail = this.stderr.trim()
+
+      if (!this.status.ready) {
         this.status = {
           ready: false,
           model: this.model,
           device: "cuda",
-          error: this.stderr.trim() || `Whisper worker exited with code ${code ?? "unknown"}`,
+          error: detail || `Whisper worker exited with code ${code ?? "unknown"}`,
+        }
+        this.readyReject?.(new Error(this.status.error))
+      } else {
+        this.status = {
+          ready: false,
+          model: this.model,
+          device: "cuda",
+          error: detail || `Whisper worker exited with code ${code ?? "unknown"}`,
         }
       }
+
       this.failWaiters(new Error(this.status.error || "Whisper worker stopped"))
       this.child = undefined
       this.readyPromise = undefined
