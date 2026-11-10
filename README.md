@@ -15,6 +15,8 @@ escritorio:
   cursor, sin robar el foco ni simular `Ctrl+V`.
 - **Lectura natural**: voces neuronales de Edge (45 en español), con respaldo
   a las voces del sistema si no hay internet.
+- **WhisperX local (avanzado)**: dictado con WhisperX en WSL y GPU NVIDIA. Ver
+  [la guía](https://github.com/evious/opencode-voice-dictation/blob/main/docs/whisperx.md).
 - **Solo Windows**: la app declara `os: ["windows"]`; en otros sistemas aparece
   como no disponible en vez de fallar.
 
@@ -151,17 +153,38 @@ dictado, para que el micrófono no capture la voz del altavoz.
 El texto se inserta en la posición del cursor. Si ya hay texto y no termina en
 espacio, se añade uno de separación (configurable).
 
+## Motores de dictado
+
+| Motor | Requisitos | Estado |
+|---|---|---|
+| Windows Voice Typing (Win+H) | Windows 11, internet | Por defecto |
+| System.Speech | Windows, offline | Disponible |
+| WhisperX local (WSL) | WSL2 + Python + CUDA + NVIDIA | Avanzado · [guía](https://github.com/evious/opencode-voice-dictation/blob/main/docs/whisperx.md) |
+| `whisper.cpp` nativo | Binario + modelo | Roadmap |
+| Google Cloud Speech-to-Text | API key, internet | Roadmap |
+| OpenAI (`gpt-4o-transcribe`) | API key, internet | Roadmap |
+| Deepgram / AssemblyAI | API key, internet | Roadmap |
+
+El motor se elige en **Ajustes → Dictado por voz → Motor de dictado**.
+
+WhisperX es el único que requiere instalación manual: WSL2, un venv de Python
+con `whisperx`/`torch` CUDA y una GPU NVIDIA. El resto funciona sin setup local.
+
 ## Ajustes
 
 | Ajuste | Por defecto | Qué hace |
 |---|---|---|
-| Motor de dictado | Windows Voice Typing (Win+H) | Usa el dictado de Windows 11, más preciso. `System.Speech` es la alternativa offline. |
+| Motor de dictado | Windows Voice Typing (Win+H) | Win+H, `System.Speech` offline o `WhisperX local (WSL)`. |
 | Probar Win+H | — | Envía el atajo y comprueba que Windows abre su barra de dictado. |
 | Idioma | `es-ES` | Solo para `System.Speech`. Reconocedor instalado en Windows. Si no existe el exacto, usa el mismo idioma base. |
 | Confianza mínima | 0,4 | Solo para `System.Speech`. Descarta resultados con menor confianza. |
 | Espacio antes del texto | Sí | Solo para `System.Speech`. Separa el dictado de lo que ya hay escrito. |
 | Enfocar el prompt al terminar | Sí | Solo para `System.Speech`. Mueve el cursor al prompt tras cada frase. |
 | Probar micrófono | — | Solo para `System.Speech`. Lista los idiomas instalados y comprueba el micrófono. |
+| Python del entorno | Ruta del venv de WhisperX | Solo WhisperX. Python del venv con `whisperx`. |
+| Modelo (WhisperX) | `large-v3-turbo` | Solo WhisperX. `large-v3` o `medium` si necesitas otra cosa. |
+| Idioma (WhisperX) | Automático | Solo WhisperX. Autodetección o `es`, `en`, `pt`. |
+| Comprobar WhisperX | — | Arranca el worker y valida GPU/modelo. |
 
 ### Lectura en voz alta
 
@@ -187,7 +210,14 @@ PowerShell (SAPI) no hay pausa real: el menú muestra solo «Leer de nuevo» y
 
 ## Permisos
 
-El plugin es local y no hace peticiones de red. Para funcionar:
+El plugin funciona en local salvo lo que elijas y use red:
+
+- **WhisperX**: escribe el audio en `%TEMP%\opencode-voice-dictation`, lo pasa a
+  WSL y ejecuta el worker con tu venv. El audio no sale del equipo.
+- **Edge**: envía el texto a Microsoft para sintetizar la voz (online).
+- **Futuros motores en la nube**: enviarán el audio al proveedor que configures.
+
+Para el dictado/lectura con Windows:
 
 - Escribe un script `dictation-<hash>.ps1` o `speak-<hash>.ps1` en
   `%TEMP%\opencode-voice-dictation`.
@@ -214,6 +244,9 @@ bloqueas el micrófono, verás el aviso «No hay ningún micrófono disponible»
 | «Windows no tiene voces instaladas para la lectura» | Instala una voz en Configuración → Hora e idioma → Voz, o revisa que `System.Speech` esté disponible. El plugin usa primero las voces de Chromium y cae a SAPI si no hay. |
 | La lectura se corta o no suena | Prueba «Probar voz» en Ajustes; si suena ahí, el problema es el dispositivo de salida de la app. |
 | «Abre una conversación para leer su último mensaje» | En Home o en un chat nuevo sin mensajes no hay respuesta que leer. |
+| WhisperX se queda en «Transcribiendo…» | El worker no arrancó. Mira el toast: ruta del Python, CUDA o token de Hugging Face. Guía: <https://github.com/evious/opencode-voice-dictation/blob/main/docs/whisperx.md>. |
+| El RPC devuelve 400 o no cargan las voces de Edge | El plugin server no cargó: Ajustes → Extensiones → Plugins → **Reload**, o reinicia el servicio. |
+| WhisperX pide token de Hugging Face | `huggingface-cli login` y acepta los términos del modelo de VAD de `pyannote`. |
 
 Los errores del plugin se registran en el log de OpenCode Desktop; los `toast`
 de la app muestran los más importantes.
@@ -224,6 +257,10 @@ de la app muestran los más importantes.
   cambiar entre versiones de OpenCode.
 - `System.Speech` no añade puntuación ni mayúsculas automáticamente y su
   precisión es inferior a Whisper o al dictado nativo de Windows 11.
+- **WhisperX local** requiere WSL2, Python, CUDA y una GPU NVIDIA. No es
+  portable: es un motor avanzado para equipos ya preparados.
+- El primer dictado con WhisperX tarda 10–30 s porque carga el modelo en la GPU;
+  los siguientes son rápidos.
 - El modo Win+H envía la combinación con `keybd_event`. Kaspersky o la
   protección UIPI de Windows pueden bloquearla; en ese caso usa `System.Speech`.
 - Con Win+H el texto lo escribe Windows en el campo enfocado: el plugin no
@@ -239,22 +276,56 @@ de la app muestran los más importantes.
 - Si cambias de sesión durante el dictado, el texto se descarta con un aviso
   para no escribirlo en la sesión equivocada.
 
-El motor está aislado en `src/gui/engines/`: para cambiar a Whisper local o a
-una API en la nube basta con respetar el mismo contrato (`startEngine` y los
-eventos `ready` / `final` / `error`).
+El dictado vive en `src/gui` (Win+H y System.Speech) y en el servidor
+(`src/whisper` para WhisperX y `src/edge.ts` para la lectura). Para añadir un
+motor nuevo, consulta la sección siguiente.
+
+## Añadir un motor de dictado nuevo
+
+La ventana ya graba el audio (`getUserMedia` + `MediaRecorder`) y lo envía por
+RPC al servidor. Eso es reutilizable para cualquier motor: local o en la nube.
+
+1. **Contrato RPC** (`src/rpc.ts`): añade un método
+   `transcribe({ audio, mime, language, ... })` o uno por motor.
+2. **Servidor** (`src/index.ts`): implementa el método. Para la nube, llama al
+   proveedor desde el servidor, nunca desde la ventana.
+3. **Ajustes** (`src/gui/settings.tsx`): añade el motor al selector y sus campos
+   (API key, idioma, modelo).
+4. **Ventana** (`src/gui/window.tsx`): enruta el modo del motor a la grabación y
+   al RPC; inserta con `composer.insert()` o copia con `ctx.system.copy()` si
+   quieres dictar hacia otra app.
+
+Proveedores previstos:
+
+- **Google Cloud Speech-to-Text**: cuenta de servicio o API key,
+  `@google-cloud/speech`, audio `WEBM_OPUS` o `LINEAR16` 16 kHz.
+- **OpenAI**: `gpt-4o-transcribe` o `whisper-1`,
+  `POST /v1/audio/transcriptions`, API key.
+- **Deepgram / AssemblyAI**: `POST /v1/listen`, API key.
+- **`whisper.cpp` nativo**: binario + modelo `ggml`, sin WSL ni Python; la
+  opción más portable para uso local.
+
+Las claves de API no deben viajar al renderer. Guárdalas en el store del plugin
+o, mejor, en variables de entorno del servidor.
 
 ## Desarrollo
 
 ```
 src/
-├── index.ts                 Parte servidor: fija el id "voice-dictation"
+├── index.ts                 Parte servidor: registra los RPC de Edge y WhisperX
+├── rpc.ts                   Contrato RPC compartido (voces, síntesis, dictado)
+├── edge.ts                  Voces y síntesis de Edge (servidor)
+├── whisper/
+│   ├── server.ts            Worker persistente, spawn WSL/Node, timeouts
+│   └── worker.py            WhisperX en la GPU; protocolo JSON por stdin/stdout
 ├── gui.tsx                  Entrada ./gui-experimental
 └── gui/
     ├── definition.ts        os, stores, i18n es/en
     ├── contract.ts          Ipc: dictado y lectura
     ├── window.tsx           Píldoras, comandos e inserción de texto
-    ├── main.ts              Dictado y voz de respaldo
-    ├── speak.ts             Limpieza de Markdown, troceado y speechSynthesis
+    ├── recorder.ts          getUserMedia + MediaRecorder para WhisperX
+    ├── main.ts              Dictado Win+H / System.Speech y voz SAPI
+    ├── speak.ts             Limpieza de Markdown, troceado, Edge y speechSynthesis
     ├── settings.tsx         Página de ajustes
     └── engines/
         ├── script.ts        Script de PowerShell para el dictado
@@ -263,10 +334,13 @@ src/
         └── sapi-speech.ts   Voz de respaldo y listado de voces SAPI
 ```
 
+La guía de WhisperX está en [`docs/whisperx.md`](docs/whisperx.md).
+
 `npm run typecheck` valida los tipos, `npm run build` genera el bundle CJS y
 `npm test` ejecuta el smoke test (`test/smoke.cjs`): simula el host de la app,
-un `powershell.exe` falso y la API de voz del navegador para comprobar dictado,
-lectura, limpieza de Markdown, cancelación, fallback y errores.
+un `powershell.exe` falso, la API de voz del navegador, el RPC de Edge y la
+grabadora de WhisperX para comprobar dictado, lectura, limpieza de Markdown,
+pausa, cancelación, fallback y errores.
 
 ## Publicar
 
