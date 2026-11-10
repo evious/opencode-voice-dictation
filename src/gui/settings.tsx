@@ -274,7 +274,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
           title: ctx.t("pill.title"),
           description: ctx.t("whispercpp.ffmpeg.install.ok"),
         })
-        await readWhisperCppStatus()
+        await readWhisperCppStatus().catch(() => {})
       } else {
         const manual = result.command
           ? ` ${ctx.t("whispercpp.ffmpeg.install.manual", { command: result.command })}`
