@@ -189,7 +189,7 @@ export function VoiceSettings(props: { speaker: Speaker }) {
         model: whisperCppPrefs.value.model,
       })) as { installed: boolean; ready: boolean; model: string; error: string }
 
-      if (status.error && !status.installed) {
+      if (status.error) {
         ctx.toast.show({
           variant: "error",
           title: ctx.t("pill.title"),
