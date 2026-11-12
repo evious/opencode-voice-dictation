@@ -1,8 +1,8 @@
 import type { Plugin } from "@opencode/plugin/gui"
 import { Dictation, Speech, VoiceTyping } from "./contract"
 import { diagnose, startEngine, type EngineHandle } from "./engines/system-speech"
-import { listSapiVoices, speakSapi, type SpeakHandle } from "./engines/sapi-speech"
-import { sendVoiceTypingShortcut } from "./engines/win-h"
+import { listSapiVoices, speakSapi, type SpeakHandle } from "../sapi-speech"
+import { sendVoiceTypingShortcut } from "../win-h"
 
 type Status = "idle" | "starting" | "listening" | "error"
 

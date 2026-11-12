@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { SPEAK_SCRIPT } from "./speak-script"
+import { SPEAK_SCRIPT } from "./speak-script.js"
 
 const POWERSHELL = "powershell.exe"
 
