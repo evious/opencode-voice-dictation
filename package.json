@@ -1,7 +1,7 @@
 {
   "name": "opencode-voice-dictation",
   "version": "0.8.1",
-  "description": "Offline voice dictation and read-aloud for OpenCode Desktop on Windows and Linux",
+  "description": "Offline voice dictation and read-aloud for OpenCode Desktop and TUI on Windows and Linux",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",
   "homepage": "https://github.com/evious/opencode-voice-dictation#readme",
@@ -15,6 +15,8 @@
   "keywords": [
     "opencode",
     "opencode-plugin",
+    "tui",
+    "terminal",
     "voice",
     "dictation",
     "speech-to-text",
@@ -28,7 +30,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./gui-experimental": "./dist/gui-experimental.cjs",
-    "./rpc": "./src/rpc.ts"
+    "./rpc": "./src/rpc.ts",
+    "./tui": "./src/tui.ts"
   },
   "files": [
     "src",
@@ -38,8 +41,8 @@
     "docs"
   ],
   "dependencies": {
-    "msedge-tts": "^2.1.1",
-    "@opencode/plugin": "2.2.6"
+    "@opencode/plugin": "2.2.6",
+    "msedge-tts": "^2.1.1"
   },
   "publishConfig": {
     "access": "public"
@@ -47,11 +50,14 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
-    "test": "node test/smoke.cjs",
+    "test": "node test/speech-text.cjs && node test/tui.cjs && node test/smoke.cjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build && npm test"
   },
   "devDependencies": {
+    "@opencode/theme": "^2.2.6",
+    "@opentui/core": "^0.8.1",
+    "@opentui/solid": "^0.8.1",
     "@types/node": "^24.0.0",
     "effect": "4.1.0",
     "solid-js": "^1.9.17",

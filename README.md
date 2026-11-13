@@ -1,12 +1,13 @@
-# Dictado por voz para OpenCode Desktop
+# Dictado por voz para OpenCode Desktop y TUI
 
 Plugin de [OpenCode](https://opencode.ai) V2 que añade voz a la app de
-escritorio:
+escritorio y a la TUI:
 
 - **Dictado**: pulsas la píldora y se abre el dictado de Windows 11 (Win+H),
   que escribe en el prompt con su motor neuronal. También puedes usar el motor
   offline `System.Speech` desde Ajustes.
 - **Lectura**: pulsa «Leer» y reproduce en voz alta la última respuesta.
+- **TUI**: usa `/dictado` y `/leer` (o `<leader>d` y `<leader>v`) en la terminal.
 
 - **Dictado preciso**: por defecto delega en Windows Voice Typing (Win+H).
 - **Modo offline**: `System.Speech` sigue disponible como alternativa sin
@@ -28,8 +29,8 @@ escritorio:
 opencode plugin add opencode-voice-dictation
 ```
 
-Reinicia OpenCode Desktop. El plugin queda registrado en el `opencode.json`
-global del entorno donde ejecutes el comando.
+Reinicia OpenCode Desktop o la TUI. El plugin queda registrado en el
+`opencode.json` global del entorno donde ejecutes el comando.
 
 Actualizar:
 
@@ -43,6 +44,20 @@ está commiteado):
 ```bash
 opencode plugin add github:evious/opencode-voice-dictation
 ```
+
+## TUI (terminal)
+
+El paquete también exporta una parte TUI. En Windows puedes dictar y escuchar
+la última respuesta sin salir de la terminal:
+
+| Comando | Atajo | Acción |
+| --- | --- | --- |
+| `/dictado` | `<leader>d` (`Ctrl+X`, luego `d`) | Abre el dictado de Windows (Win+H) en el prompt. |
+| `/leer` | `<leader>v` (`Ctrl+X`, luego `v`) | Lee la última respuesta. Si ya está leyendo, la detiene. |
+
+La lectura usa las voces neuronales de Edge y, si falla la red o la
+reproducción, cae en la voz del sistema. El dictado de la TUI requiere Windows
+por ahora; Linux se añadirá más adelante.
 
 ## Compatibilidad
 
