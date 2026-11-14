@@ -230,7 +230,13 @@ export async function insertIntoPrompt(
       return { ok: true, method: "clipboard", message: "Texto copiado. Pégalo con Ctrl+Shift+V." }
     }
 
-    if (await pasteWsl(ps)) return { ok: true, method: "clipboard", message: "" }
+    if (await pasteWsl(ps)) {
+      return {
+        ok: true,
+        method: "clipboard",
+        message: "Si no aparece en el prompt, pégalo con Ctrl+Shift+V.",
+      }
+    }
     return { ok: true, method: "clipboard", message: "Texto copiado. Pégalo con Ctrl+Shift+V." }
   }
 
