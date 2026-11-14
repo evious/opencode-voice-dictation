@@ -37,6 +37,10 @@ export function createStatusController(context: Plugin.Context, actions: StatusA
     })
   }
 
+  // The memory store survives plugin hot reloads; do not keep a stale
+  // "recording" state from a previous instance.
+  setMode("idle")
+
   const Status = () => {
     const current = state.mode
     const busy = current === "transcribing"
