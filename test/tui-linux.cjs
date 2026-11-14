@@ -58,6 +58,15 @@ const state = {
   listCalls: [],
   playerCalls: [],
   speakCalls: [],
+  storageSettings: undefined,
+  selectQueue: [],
+  selectCalls: [],
+  alerts: [],
+  voiceCalls: 0,
+  voices: [
+    { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
+    { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
+  ],
 }
 
 function reset() {
@@ -94,6 +103,15 @@ function reset() {
   state.listCalls = []
   state.playerCalls = []
   state.speakCalls = []
+  state.storageSettings = undefined
+  state.selectQueue = []
+  state.selectCalls = []
+  state.alerts = []
+  state.voiceCalls = 0
+  state.voices = [
+    { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
+    { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
+  ]
 }
 
 const mocks = {
@@ -227,6 +245,10 @@ function makeContext(options = {}) {
       if (state.edgeError) throw state.edgeError
       return "YXVkaW8="
     },
+    edgeVoices: async () => {
+      state.voiceCalls++
+      return state.voices
+    },
   }
 
   const client = {
@@ -245,13 +267,26 @@ function makeContext(options = {}) {
       toast: { show: (toast) => toasts.push(toast) },
       router: { current: () => route },
       dialog: {
+        select: async (input) => {
+          state.selectCalls.push(input)
+          return state.selectQueue.shift()
+        },
         confirm: async () => {
           state.confirmCalls++
           return state.confirmResult
         },
+        alert: async (input) => {
+          state.alerts.push(input)
+        },
       },
     },
     client,
+    storage: {
+      store: (_key, { initial }) => {
+        state.storageSettings = { ...initial }
+        return [state.storageSettings, async (mutation) => mutation(state.storageSettings)]
+      },
+    },
     keymap: { layer: (factory) => layers.push(factory()) },
   }
 
@@ -496,6 +531,63 @@ async function run() {
 
     if (state.recordCancels !== 1) throw new Error(`record cancels ${state.recordCancels}`)
     if (state.playerCalls.length !== 1) throw new Error("reading did not start")
+    cleanup()
+  })
+
+  await test("settings menu changes the whisper.cpp model", async () => {
+    const h = makeContext()
+    const cleanup = definition.setup(h.context)
+    state.selectQueue = ["model", "small-q5_1", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.storageSettings.model !== "small-q5_1") {
+      throw new Error(`model ${state.storageSettings.model}`)
+    }
+    if (!state.selectCalls[0].options.some((option) => option.value === "model")) {
+      throw new Error("model option missing")
+    }
+    cleanup()
+  })
+
+  await test("settings menu changes engine, voice, rate and skipCode", async () => {
+    const h = makeContext()
+    const cleanup = definition.setup(h.context)
+    state.confirmResult = false
+    state.selectQueue = ["engine", "system", "voice", "es-MX-DaliaNeural", "rate", "1.2", "skipCode", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.storageSettings.engine !== "system") throw new Error(`engine ${state.storageSettings.engine}`)
+    if (state.storageSettings.voice !== "es-MX-DaliaNeural") throw new Error(`voice ${state.storageSettings.voice}`)
+    if (state.storageSettings.rate !== 1.2) throw new Error(`rate ${state.storageSettings.rate}`)
+    if (state.storageSettings.skipCode !== false) throw new Error(`skipCode ${state.storageSettings.skipCode}`)
+    if (state.voiceCalls !== 1) throw new Error(`voice calls ${state.voiceCalls}`)
+    cleanup()
+  })
+
+  await test("settings menu resets to opencode.jsonc values", async () => {
+    const h = makeContext({ model: "small-q5_1" })
+    const cleanup = definition.setup(h.context)
+    state.selectQueue = ["model", "base-q5_1", "reset", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.storageSettings.model !== "small-q5_1") {
+      throw new Error(`reset model ${state.storageSettings.model}`)
+    }
+    cleanup()
+  })
+
+  await test("settings menu reports whisper.cpp and ffmpeg status", async () => {
+    const h = makeContext()
+    const cleanup = definition.setup(h.context)
+    state.selectQueue = ["status", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.alerts.length !== 1) throw new Error(`alerts ${state.alerts.length}`)
+    if (!state.alerts[0].message.includes("ffmpeg")) throw new Error("status missing ffmpeg")
     cleanup()
   })
 

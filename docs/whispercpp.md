@@ -163,6 +163,8 @@ La parte TUI ya soporta Linux:
   portapapeles de Windows en WSL.
 - `/leer` usa Edge + `ffplay`/`mpv`; si falla, `spd-say` o `espeak-ng`.
 - `/pausar` pausa o reanuda la lectura.
+- `/ajustes-voz` abre el menú de ajustes de la TUI: modelo, idioma, duración,
+  inserción, voz, velocidad y comprobación/instalación de whisper.cpp y ffmpeg.
 
 Requisitos:
 

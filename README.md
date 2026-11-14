@@ -57,6 +57,7 @@ El paquete exporta una parte TUI para Windows y Linux. Dicta y escucha la
 | `/dictado` | `<leader>d` (`Ctrl+X`, luego `d`) | Windows: abre Win+H. Linux: graba y transcribe con whisper.cpp. |
 | `/leer` | `<leader>v` (`Ctrl+X`, luego `v`) | Lee la última respuesta. Si ya está leyendo, la detiene. |
 | `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura (Linux con ffplay/spd-say). |
+| `/ajustes-voz` | — | Menú de ajustes de la TUI: modelo, idioma, inserción, voz, velocidad, etc. |
 
 **Windows**: la lectura usa Edge y, si falla, System.Speech (SAPI). El dictado
 delega en Win+H.
@@ -106,6 +107,12 @@ Opciones en `opencode.jsonc`:
 - `engine`: `edge` o `system` (fuerza la voz local).
 - `maxSeconds`: límite de grabación (5–300).
 - `voice`, `rate`, `skipCode`: igual que en el GUI.
+
+También puedes cambiar estas opciones sin editar JSON con `/ajustes-voz`. El
+menú guarda en el store durable de la TUI; `opencode.jsonc` solo siembra los
+valores la primera vez. «Restablecer» vuelve a aplicar las opciones actuales de
+`opencode.jsonc`. Los ajustes de la TUI son independientes de los de OpenCode
+Desktop.
 
 Guía completa: [`docs/tui.md`](https://github.com/evious/opencode-voice-dictation/blob/main/docs/tui.md).
 

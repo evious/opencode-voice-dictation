@@ -15,6 +15,17 @@ const DEFAULT_LANGUAGE = "auto"
 const DEFAULT_MAX_SECONDS = 60
 const MAX_EDGE_CHUNK = 4000
 
+type TuiSettings = {
+  model: string
+  language: string
+  maxSeconds: number
+  insert: string
+  engine: string
+  voice: string
+  rate: number
+  skipCode: boolean
+}
+
 type Active = {
   stop(): void
   pause?(): void
@@ -65,14 +76,18 @@ export default Plugin.define({
       return typeof value === "boolean" ? value : fallback
     }
 
-    const voice = optionString("voice", DEFAULT_VOICE)
-    const rate = Math.max(0.5, Math.min(2, optionNumber("rate", DEFAULT_RATE)))
-    const skipCode = optionBoolean("skipCode", true)
-    const model = optionString("model", DEFAULT_MODEL)
-    const language = optionString("language", DEFAULT_LANGUAGE)
-    const maxSeconds = Math.max(5, Math.min(300, Math.round(optionNumber("maxSeconds", DEFAULT_MAX_SECONDS))))
-    const insertMode = optionString("insert", "auto")
-    const ttsEngine = optionString("engine", "edge")
+    const initial: TuiSettings = {
+      model: optionString("model", DEFAULT_MODEL),
+      language: optionString("language", DEFAULT_LANGUAGE),
+      maxSeconds: Math.max(5, Math.min(300, Math.round(optionNumber("maxSeconds", DEFAULT_MAX_SECONDS)))),
+      insert: optionString("insert", "auto"),
+      engine: optionString("engine", "edge"),
+      voice: optionString("voice", DEFAULT_VOICE),
+      rate: Math.max(0.5, Math.min(2, optionNumber("rate", DEFAULT_RATE))),
+      skipCode: optionBoolean("skipCode", true),
+    }
+
+    const [settings, updateSettings] = context.storage.store<TuiSettings>("settings", { initial })
 
     const isWin = process.platform === "win32"
     const isLinux = process.platform === "linux"
@@ -124,8 +139,8 @@ export default Plugin.define({
         }
 
         const handle: SpeechHandle = isWin
-          ? speakSapi({ text, rate, voice: "" }, onDone)
-          : speakLinux(text, rate, onDone)
+          ? speakSapi({ text, rate: settings.rate, voice: "" }, onDone)
+          : speakLinux(text, settings.rate, onDone)
 
         wrapper = {
           stop() {
@@ -146,6 +161,7 @@ export default Plugin.define({
 
     const ensureWhisperCpp = async (): Promise<boolean> => {
       if (prepared) return true
+      const model = settings.model
 
       type Status = {
         installed: boolean
@@ -244,8 +260,8 @@ export default Plugin.define({
         const result = (await rpc.whisperCppTranscribe({
           audio: captured.audio,
           mime: captured.mime,
-          language,
-          model,
+          language: settings.language,
+          model: settings.model,
         })) as { text: string; language: string }
 
         const text = result.text.trim()
@@ -254,7 +270,7 @@ export default Plugin.define({
           return
         }
 
-        const inserted = await insertIntoPrompt(context, text, { mode: insertMode })
+        const inserted = await insertIntoPrompt(context, text, { mode: settings.insert })
         if (!inserted.ok) {
           toast(inserted.message, "error")
           return
@@ -289,6 +305,7 @@ export default Plugin.define({
       }
 
       if (!(await ensureWhisperCpp())) return
+      const maxSeconds = Math.max(5, Math.min(300, Math.round(settings.maxSeconds)))
 
       try {
         recording = await startLinuxRecording({ maxSeconds })
@@ -365,13 +382,13 @@ export default Plugin.define({
           .filter((part) => part.type === "text")
           .map((part) => part.text)
           .join("\n")
-        const cleaned = cleanForSpeech(text, skipCode)
+        const cleaned = cleanForSpeech(text, settings.skipCode)
         if (!cleaned) {
           toast("La última respuesta no tiene texto para leer.", "info")
           return
         }
 
-        if (ttsEngine === "system") {
+        if (settings.engine === "system") {
           await speakSystem(cleaned, current)
           return
         }
@@ -382,7 +399,11 @@ export default Plugin.define({
 
           let audio: string
           try {
-            const result = (await rpc.edgeSpeak({ text: chunk, voice, rate })) as string
+            const result = (await rpc.edgeSpeak({
+              text: chunk,
+              voice: settings.voice,
+              rate: settings.rate,
+            })) as string
             if (typeof result !== "string" || result.length === 0) {
               edgeFailed = true
               break
@@ -441,6 +462,303 @@ export default Plugin.define({
       }
     }
 
+    const settingsMenu = async () => {
+      while (true) {
+        const options: Array<{ title: string; value: string; description?: string }> = []
+
+        if (isLinux) {
+          options.push(
+            { title: "Modelo", value: "model", description: settings.model },
+            { title: "Idioma", value: "language", description: settings.language },
+            { title: "Duración máxima", value: "maxSeconds", description: `${settings.maxSeconds} s` },
+            { title: "Inserción", value: "insert", description: settings.insert },
+          )
+        }
+
+        options.push(
+          { title: "Motor de lectura", value: "engine", description: settings.engine },
+          { title: "Voz", value: "voice", description: settings.voice },
+          { title: "Velocidad", value: "rate", description: `${settings.rate}×` },
+          { title: "Omitir código", value: "skipCode", description: settings.skipCode ? "sí" : "no" },
+        )
+
+        if (isLinux) {
+          options.push(
+            { title: "Comprobar whisper.cpp", value: "status", description: "Motor, modelo y ffmpeg" },
+            { title: "Instalar whisper.cpp", value: "install", description: "Descargar el motor/modelo" },
+            { title: "Instalar ffmpeg", value: "ffmpeg", description: "Conversión de audio" },
+          )
+        }
+
+        options.push(
+          { title: "Restablecer", value: "reset", description: "Valores de opencode.jsonc" },
+          { title: "Salir", value: "done" },
+        )
+
+        const choice = await context.ui.dialog.select({
+          title: "Ajustes de dictado por voz",
+          options,
+        })
+
+        if (!choice || choice === "done") return
+
+        if (choice === "model") {
+          const value = await context.ui.dialog.select({
+            title: "Modelo whisper.cpp",
+            current: settings.model,
+            options: [
+              { title: "base-q5_1", value: "base-q5_1", description: "57 MB · recomendado" },
+              { title: "small-q5_1", value: "small-q5_1", description: "180 MB · más preciso" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.model = value
+            })
+            prepared = false
+          }
+          continue
+        }
+
+        if (choice === "language") {
+          const value = await context.ui.dialog.select({
+            title: "Idioma del dictado",
+            current: settings.language,
+            options: [
+              { title: "Automático", value: "auto" },
+              { title: "Español", value: "es" },
+              { title: "English", value: "en" },
+              { title: "Português", value: "pt" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.language = value
+            })
+          }
+          continue
+        }
+
+        if (choice === "maxSeconds") {
+          const value = await context.ui.dialog.select({
+            title: "Duración máxima de grabación",
+            current: String(settings.maxSeconds),
+            options: [
+              { title: "30 segundos", value: "30" },
+              { title: "60 segundos", value: "60" },
+              { title: "120 segundos", value: "120" },
+              { title: "300 segundos", value: "300" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.maxSeconds = Number(value)
+            })
+          }
+          continue
+        }
+
+        if (choice === "insert") {
+          const value = await context.ui.dialog.select({
+            title: "Cómo insertar el texto",
+            current: settings.insert,
+            options: [
+              { title: "Automático", value: "auto", description: "appendPrompt → xdotool/portapapeles" },
+              { title: "Escribir", value: "type", description: "xdotool/wtype" },
+              { title: "Portapapeles", value: "clipboard", description: "Copia y no pega automáticamente" },
+              { title: "appendPrompt", value: "append", description: "Solo si la TUI lo expone" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.insert = value
+            })
+          }
+          continue
+        }
+
+        if (choice === "engine") {
+          const value = await context.ui.dialog.select({
+            title: "Motor de lectura",
+            current: settings.engine,
+            options: [
+              { title: "Edge (online)", value: "edge" },
+              { title: "Sistema (offline)", value: "system" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.engine = value
+            })
+          }
+          continue
+        }
+
+        if (choice === "voice") {
+          let voices: Array<{ id: string; label: string }> = []
+
+          try {
+            const result = (await rpc.edgeVoices({})) as Array<{ id: string; label: string }>
+            voices = result.map((voice) => ({ id: voice.id, label: voice.label }))
+          } catch {
+            voices = []
+          }
+
+          if (voices.length === 0) {
+            voices = [
+              { id: settings.voice, label: `${settings.voice} (actual)` },
+              { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
+              { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
+            ]
+          } else if (!voices.some((voice) => voice.id === settings.voice)) {
+            voices.unshift({ id: settings.voice, label: `${settings.voice} (actual)` })
+          }
+
+          const value = await context.ui.dialog.select({
+            title: "Voz de lectura",
+            current: settings.voice,
+            options: voices.map((voice) => ({
+              title: voice.label,
+              value: voice.id,
+              description: voice.id,
+            })),
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.voice = value
+            })
+          }
+          continue
+        }
+
+        if (choice === "rate") {
+          const value = await context.ui.dialog.select({
+            title: "Velocidad de lectura",
+            current: String(settings.rate),
+            options: [
+              { title: "0,8×", value: "0.8" },
+              { title: "1×", value: "1" },
+              { title: "1,2×", value: "1.2" },
+              { title: "1,5×", value: "1.5" },
+            ],
+          })
+          if (value) {
+            await updateSettings((draft) => {
+              draft.rate = Number(value)
+            })
+          }
+          continue
+        }
+
+        if (choice === "skipCode") {
+          const value = await context.ui.dialog.confirm({
+            title: "Omitir bloques de código",
+            message: "¿Omitir el código al leer en voz alta?",
+            label: { confirm: "Sí", cancel: "No" },
+          })
+          if (value !== undefined) {
+            await updateSettings((draft) => {
+              draft.skipCode = value
+            })
+          }
+          continue
+        }
+
+        if (choice === "status") {
+          try {
+            const status = (await rpc.whisperCppStatus({ model: settings.model })) as {
+              installed: boolean
+              model: string
+              error: string
+              ffmpeg: boolean
+              ffmpegVersion: string
+            }
+
+            await context.ui.dialog.alert({
+              title: "whisper.cpp",
+              message: [
+                `Motor/modelo: ${status.installed ? "instalado" : "no instalado"}`,
+                `Modelo: ${status.model}`,
+                `ffmpeg: ${status.ffmpeg ? status.ffmpegVersion : "no instalado"}`,
+                `Error: ${status.error || "—"}`,
+              ].join("\n"),
+            })
+          } catch (error) {
+            toast(`No se pudo comprobar whisper.cpp: ${errorMessage(error)}`, "error")
+          }
+          continue
+        }
+
+        if (choice === "install") {
+          const accepted = await context.ui.dialog.confirm({
+            title: "whisper.cpp",
+            message: `¿Descargar el modelo ${settings.model} y el motor?`,
+            label: { confirm: "Descargar", cancel: "Cancelar" },
+          })
+          if (!accepted) continue
+
+          toast("Descargando whisper.cpp…", "info")
+          try {
+            const result = (await rpc.whisperCppInstall({ model: settings.model })) as {
+              ok: boolean
+              model: string
+              error: string
+            }
+            if (result.ok) {
+              prepared = false
+              toast(`whisper.cpp instalado: ${result.model}`, "success")
+            } else {
+              toast(`No se pudo instalar whisper.cpp: ${result.error}`, "error")
+            }
+          } catch (error) {
+            toast(`No se pudo instalar whisper.cpp: ${errorMessage(error)}`, "error")
+          }
+          continue
+        }
+
+        if (choice === "ffmpeg") {
+          const accepted = await context.ui.dialog.confirm({
+            title: "ffmpeg",
+            message: "ffmpeg es necesario para convertir el audio. ¿Instalarlo ahora?",
+            label: { confirm: "Instalar", cancel: "Cancelar" },
+          })
+          if (!accepted) continue
+
+          try {
+            const result = (await rpc.whisperCppInstallFfmpeg({})) as {
+              ok: boolean
+              error: string
+              command: string
+            }
+            if (result.ok) {
+              toast("ffmpeg instalado.", "success")
+            } else {
+              const command = result.command ? ` ${result.command}` : ""
+              toast(`No se pudo instalar ffmpeg: ${result.error}.${command}`, "error")
+            }
+          } catch (error) {
+            toast(`No se pudo instalar ffmpeg: ${errorMessage(error)}`, "error")
+          }
+          continue
+        }
+
+        if (choice === "reset") {
+          const accepted = await context.ui.dialog.confirm({
+            title: "Restablecer ajustes",
+            message: "¿Volver a los valores de opencode.jsonc?",
+            label: { confirm: "Restablecer", cancel: "Cancelar" },
+          })
+          if (!accepted) continue
+
+          await updateSettings((draft) => {
+            Object.assign(draft, initial)
+          })
+          prepared = false
+          toast("Ajustes restablecidos.", "success")
+        }
+      }
+    }
+
     context.keymap.layer(() => ({
       mode: "global",
       priority: 10,
@@ -479,6 +797,16 @@ export default Plugin.define({
           slash: { name: "pausar", aliases: ["pause"] },
           suggested: false,
           run: togglePause,
+        },
+        {
+          id: "voice-dictation.tui.settings",
+          title: "Ajustes de dictado por voz",
+          description: "Modelo, idioma, inserción, voz y velocidad.",
+          group: "Voz",
+          palette: true,
+          slash: { name: "ajustes-voz", aliases: ["voice-settings"] },
+          suggested: false,
+          run: settingsMenu,
         },
       ],
       bindings: ["voice-dictation.tui.dictate", "voice-dictation.tui.read", "voice-dictation.tui.pause"],

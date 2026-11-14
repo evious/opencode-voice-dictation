@@ -138,8 +138,19 @@ function makeContext(options = {}) {
     ui: {
       toast: { show: (toast) => toasts.push(toast) },
       router: { current: () => route },
+      dialog: {
+        select: async () => undefined,
+        confirm: async () => true,
+        alert: async () => {},
+      },
     },
     client,
+    storage: {
+      store: (_key, { initial }) => {
+        const value = { ...initial }
+        return [value, async (mutation) => mutation(value)]
+      },
+    },
     keymap: {
       layer: (factory) => layers.push(factory()),
     },
@@ -192,12 +203,14 @@ async function run() {
     const dictate = command(h.layers, "dictate")
     const read = command(h.layers, "read")
     const pause = command(h.layers, "pause")
+    const settings = command(h.layers, "settings")
     if (dictate.bind !== "<leader>d") throw new Error(`dictate bind ${dictate.bind}`)
     if (read.bind !== "<leader>v") throw new Error(`read bind ${read.bind}`)
     if (pause.bind !== "<leader>p") throw new Error(`pause bind ${pause.bind}`)
     if (dictate.slash.name !== "dictado") throw new Error(`dictate slash ${dictate.slash.name}`)
     if (read.slash.name !== "leer") throw new Error(`read slash ${read.slash.name}`)
     if (pause.slash.name !== "pausar") throw new Error(`pause slash ${pause.slash.name}`)
+    if (settings.slash.name !== "ajustes-voz") throw new Error(`settings slash ${settings.slash.name}`)
     cleanup()
   })
 

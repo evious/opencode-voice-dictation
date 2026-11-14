@@ -10,8 +10,33 @@ Windows delega el dictado en Win+H y en Linux usa whisper.cpp.
 | `/dictado` | `<leader>d` (`Ctrl+X`, luego `d`) | Windows: abre Win+H. Linux: empieza/para la grabación y transcribe. |
 | `/leer` | `<leader>v` (`Ctrl+X`, luego `v`) | Lee la última respuesta. Si ya está leyendo, la detiene. |
 | `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura (Linux con ffplay/spd-say). |
+| `/ajustes-voz` | — | Menú de ajustes de la TUI. |
 
 También aparecen en la paleta (`Ctrl+P`) y en la ayuda de atajos.
+
+## Ajustes en la TUI
+
+`/ajustes-voz` abre un menú con las opciones que usa la TUI:
+
+- **Modelo** (`base-q5_1` / `small-q5_1`)
+- **Idioma** (`auto`, `es`, `en`, `pt`)
+- **Duración máxima** (30/60/120/300 s)
+- **Inserción** (`auto`, `type`, `clipboard`, `append`)
+- **Motor de lectura** (`edge`, `system`)
+- **Voz** (lista de voces Edge)
+- **Velocidad** (0.8×, 1×, 1.2×, 1.5×)
+- **Omitir código** (sí/no)
+- **Comprobar** whisper.cpp/ffmpeg
+- **Instalar** whisper.cpp o ffmpeg
+- **Restablecer** a los valores de `opencode.jsonc`
+
+En Windows solo se muestran las opciones que aplican (motor, voz, velocidad,
+omitir código); el dictado sigue siendo Win+H.
+
+Los valores se guardan en el almacenamiento durable de la TUI. La primera vez
+se toman de `opencode.jsonc`; después manda lo elegido en el menú. «Restablecer»
+vuelve a aplicar las opciones actuales del JSON. Los ajustes de la TUI son
+independientes de los de OpenCode Desktop.
 
 ## Requisitos
 
@@ -74,7 +99,8 @@ Mantén la terminal enfocada durante la grabación y la inserción.
 
 ## Opciones
 
-Se configuran en `opencode.jsonc`:
+Los valores iniciales se configuran en `opencode.jsonc`; después puedes
+cambiarlos con `/ajustes-voz`:
 
 ```jsonc
 "plugins": [
