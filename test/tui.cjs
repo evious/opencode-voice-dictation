@@ -33,6 +33,8 @@ const state = {
   selectQueue: [],
   selectCalls: [],
   storageSettings: undefined,
+  statusModes: [],
+  statusDisposed: false,
   voices: [
     { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
     { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
@@ -50,6 +52,8 @@ function reset() {
   state.selectQueue = []
   state.selectCalls = []
   state.storageSettings = undefined
+  state.statusModes = []
+  state.statusDisposed = false
   state.voices = [
     { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
     { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
@@ -103,6 +107,16 @@ const mocks = {
   },
   "./tui/insert.js": {
     insertIntoPrompt: async () => ({ ok: false, method: "none", message: "" }),
+  },
+  "./tui/status.js": {
+    createStatusController: () => ({
+      setMode(mode) {
+        state.statusModes.push(mode)
+      },
+      dispose() {
+        state.statusDisposed = true
+      },
+    }),
   },
   "./tui/linux/dictation.js": {
     async startLinuxRecording() {
@@ -322,6 +336,8 @@ async function run() {
     if (state.playerCalls[0].paused !== 1) throw new Error("playback did not pause")
     pause.run()
     if (state.playerCalls[0].resumed !== 1) throw new Error("playback did not resume")
+    if (!state.statusModes.includes("reading")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
+    if (!state.statusModes.includes("paused")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
 
     state.pendingResolve?.(false)
     await first

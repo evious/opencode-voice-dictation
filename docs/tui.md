@@ -14,6 +14,27 @@ Windows delega el dictado en Win+H y en Linux usa whisper.cpp.
 
 También aparecen en la paleta (`Ctrl+P`) y en la ayuda de atajos.
 
+## Botones en la TUI
+
+Sobre el composer se añade una fila clicable:
+
+```
+🎤 Dictar │ 🔊 Leer │ ⏸ Pausar
+```
+
+| Estado | Qué se muestra |
+|---|---|
+| Idle | `🎤 Dictar` · `🔊 Leer` |
+| Grabando | `⏺ Parar` · `🔊 Leer` |
+| Transcribiendo | `⏳ Transcribiendo…` |
+| Leyendo | `🎤 Dictar` · `⏹ Detener` · `⏸ Pausar` |
+| Pausado | `🎤 Dictar` · `⏹ Detener` · `▶ Reanudar` |
+
+Los botones llaman a las mismas acciones que `/dictado`, `/leer` y `/pausar`.
+Los clics dependen de que la terminal envíe eventos de ratón; si no, usa los
+comandos o atajos. En Windows, `Dictar` abre Win+H y la pausa funciona con Edge
+(con SAPI no hay pausa real).
+
 ## Ajustes en la TUI
 
 `/ajustes-voz` abre un menú con las opciones que usa la TUI:

@@ -6,6 +6,7 @@ import { playMp3Base64 as playMp3Windows } from "./tui/player.js"
 import { insertIntoPrompt } from "./tui/insert.js"
 import { startLinuxRecording, type LinuxRecording } from "./tui/linux/dictation.js"
 import { playMp3Base64 as playMp3Linux, speakLinux } from "./tui/linux/playback.js"
+import { createStatusController, type StatusController } from "./tui/status.js"
 import { sendVoiceTypingShortcut } from "./win-h.js"
 
 const DEFAULT_VOICE = "es-ES-XimenaNeural"
@@ -100,6 +101,7 @@ export default Plugin.define({
     let recording: LinuxRecording | undefined
     let transcribing = false
     let prepared = false
+    let status: StatusController | undefined
 
     const toast = (message: string, variant: "info" | "success" | "warning" | "error" = "info") => {
       context.ui.toast.show({ title: "Dictado por voz", message, variant })
@@ -111,12 +113,14 @@ export default Plugin.define({
       active = undefined
       busy = false
       paused = false
+      status?.setMode("idle")
     }
 
     const cancelRecording = () => {
       const current = recording
       recording = undefined
       current?.cancel()
+      status?.setMode("idle")
     }
 
     const speakSystem = (text: string, current: number) => {
@@ -253,6 +257,7 @@ export default Plugin.define({
       if (!current) return
 
       transcribing = true
+      status?.setMode("transcribing")
       toast("Transcribiendo…", "info")
 
       try {
@@ -282,6 +287,7 @@ export default Plugin.define({
         toast(`No se pudo transcribir: ${errorMessage(error)}`, "error")
       } finally {
         transcribing = false
+        status?.setMode("idle")
       }
     }
 
@@ -309,8 +315,10 @@ export default Plugin.define({
 
       try {
         recording = await startLinuxRecording({ maxSeconds })
+        status?.setMode("recording")
         toast(`Grabando… Pulsa /dictado otra vez para parar (máx. ${maxSeconds}s).`, "info")
       } catch (error) {
+        status?.setMode("idle")
         toast(`No se pudo grabar: ${errorMessage(error)}`, "error")
       }
     }
@@ -388,6 +396,8 @@ export default Plugin.define({
           return
         }
 
+        status?.setMode("reading")
+
         if (settings.engine === "system") {
           await speakSystem(cleaned, current)
           return
@@ -436,7 +446,10 @@ export default Plugin.define({
           toast(`No se pudo leer la respuesta: ${errorMessage(error)}`, "error")
         }
       } finally {
-        if (current === generation) busy = false
+        if (current === generation) {
+          busy = false
+          status?.setMode("idle")
+        }
       }
     }
 
@@ -454,10 +467,12 @@ export default Plugin.define({
       if (paused) {
         active.resume()
         paused = false
+        status?.setMode("reading")
         toast("Lectura reanudada.", "info")
       } else {
         active.pause()
         paused = true
+        status?.setMode("paused")
         toast("Lectura pausada.", "info")
       }
     }
@@ -759,6 +774,12 @@ export default Plugin.define({
       }
     }
 
+    status = createStatusController(context, {
+      dictate: () => dictate(),
+      read: () => read(),
+      pause: togglePause,
+    })
+
     context.keymap.layer(() => ({
       mode: "global",
       priority: 10,
@@ -815,6 +836,7 @@ export default Plugin.define({
     return () => {
       stop()
       cancelRecording()
+      status?.dispose()
     }
   },
 })

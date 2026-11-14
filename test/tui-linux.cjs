@@ -63,6 +63,8 @@ const state = {
   selectCalls: [],
   alerts: [],
   voiceCalls: 0,
+  statusModes: [],
+  statusDisposed: false,
   voices: [
     { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
     { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
@@ -108,6 +110,8 @@ function reset() {
   state.selectCalls = []
   state.alerts = []
   state.voiceCalls = 0
+  state.statusModes = []
+  state.statusDisposed = false
   state.voices = [
     { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
     { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
@@ -137,6 +141,16 @@ const mocks = {
       state.insertCalls.push({ text, options })
       return state.insertResult
     },
+  },
+  "./tui/status.js": {
+    createStatusController: () => ({
+      setMode(mode) {
+        state.statusModes.push(mode)
+      },
+      dispose() {
+        state.statusDisposed = true
+      },
+    }),
   },
   "./tui/linux/dictation.js": {
     async startLinuxRecording(options) {
@@ -371,6 +385,9 @@ async function run() {
     if (call.audio !== "YXVkaW8=") throw new Error("audio not forwarded")
     if (state.insertCalls.length !== 1) throw new Error(`insert calls ${state.insertCalls.length}`)
     if (state.insertCalls[0].text !== "hola linux") throw new Error(`inserted ${state.insertCalls[0].text}`)
+    if (!state.statusModes.includes("recording")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
+    if (!state.statusModes.includes("transcribing")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
+    if (!state.statusModes.includes("idle")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
     cleanup()
   })
 
@@ -468,6 +485,8 @@ async function run() {
     if (state.playerCalls[0].paused !== 1) throw new Error("playback did not pause")
     pause.run()
     if (state.playerCalls[0].resumed !== 1) throw new Error("playback did not resume")
+    if (!state.statusModes.includes("reading")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
+    if (!state.statusModes.includes("paused")) throw new Error(`modes ${JSON.stringify(state.statusModes)}`)
 
     state.pendingResolve?.(false)
     await first

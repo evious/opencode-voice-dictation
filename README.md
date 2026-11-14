@@ -59,6 +59,17 @@ El paquete exporta una parte TUI para Windows y Linux. Dicta y escucha la
 | `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura. También `/pausa`. |
 | `/ajustes-voz` | — | Menú de ajustes de la TUI: modelo, idioma, inserción, voz, velocidad, etc. |
 
+Sobre el composer aparece una fila clicable:
+
+```
+🎤 Dictar │ 🔊 Leer │ ⏸ Pausar
+```
+
+- `Dictar` graba/transcribe en Linux o abre Win+H en Windows.
+- `Leer` lee la última respuesta; si está leyendo, la detiene.
+- `Pausar` aparece mientras lee y pausa/reanuda.
+- Si la terminal no envía eventos de ratón, usa los comandos y atajos.
+
 **Windows**: la lectura usa Edge y, si falla, System.Speech (SAPI). `/pausar`
 funciona con Edge; con SAPI no hay pausa real. El dictado delega en Win+H.
 
@@ -453,6 +464,7 @@ src/
 ├── tui/
 │   ├── player.ts            Reproducción WinRT (Windows)
 │   ├── insert.ts            Inserción: appendPrompt/xdotool/portapapeles/WSL
+│   ├── status.tsx           Botones Dictar/Leer/Pausar en el composer
 │   └── linux/
 │       ├── dictation.ts     Grabación ffmpeg/arecord y WAV
 │       └── playback.ts      ffplay/mpv y respaldo spd-say/espeak
