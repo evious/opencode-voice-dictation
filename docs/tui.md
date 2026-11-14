@@ -59,6 +59,35 @@ se toman de `opencode.jsonc`; después manda lo elegido en el menú. «Restablec
 vuelve a aplicar las opciones actuales del JSON. Los ajustes de la TUI son
 independientes de los de OpenCode Desktop.
 
+## Dictados largos y revisión
+
+Si el dictado tiene varias líneas, la TUI puede mostrarlo como
+`[Pasted ~N lines]` o «pegó N líneas». Es el resumen de pegado del host, no un
+error de whisper.cpp.
+
+Para ver cada línea y corregirla antes de enviar, edita el `cli.json` de la TUI
+(no `opencode.jsonc`):
+
+- Linux: `~/.config/opencode/cli.json`
+- Windows: `C:\Users\<usuario>\.config\opencode\cli.json`
+- Con `XDG_CONFIG_HOME`: `$XDG_CONFIG_HOME/opencode/cli.json`
+
+```json
+{
+  "prompt": {
+    "paste": "full"
+  }
+}
+```
+
+Si el archivo no existe, créalo con ese contenido. Se recarga en vivo, sin
+reiniciar la TUI.
+
+También puedes abrir `/ajustes-voz` → **Ver texto completo al dictar** para ver
+la ruta y el ejemplo. El plugin no edita `cli.json`; solo muestra la guía.
+
+Después del primer dictado multilínea, el plugin muestra un aviso recordándolo.
+
 ## Requisitos
 
 ### Windows

@@ -165,6 +165,9 @@ La parte TUI ya soporta Linux:
 - `/pausar` pausa o reanuda la lectura.
 - `/ajustes-voz` abre el menú de ajustes de la TUI: modelo, idioma, duración,
   inserción, voz, velocidad y comprobación/instalación de whisper.cpp y ffmpeg.
+- Para dictados largos, si la TUI muestra «pegó N líneas», pon
+  `"prompt": { "paste": "full" }` en `~/.config/opencode/cli.json` para ver el
+  texto completo y corregirlo antes de enviar.
 
 Requisitos:
 

@@ -120,6 +120,8 @@ function reset() {
 
 const mocks = {
   "@opencode/plugin/tui": { Plugin: { define: (value) => value } },
+  "node:os": require("node:os"),
+  "node:path": require("node:path"),
   "./rpc.js": { VoiceRpc: { id: "test.voice" } },
   "./speech-text.js": speechText,
   "./sapi-speech.js": {
@@ -391,6 +393,21 @@ async function run() {
     cleanup()
   })
 
+  await test("multi-line dictation hints about full paste", async () => {
+    const h = makeContext()
+    state.transcript = { text: "linea uno\nlinea dos", language: "es" }
+    const cleanup = definition.setup(h.context)
+    const dictate = command(h.layers, "dictate")
+
+    await dictate.run()
+    await dictate.run()
+
+    if (!h.toasts.some((toast) => toast.message.includes("prompt.paste") && toast.message.includes("full"))) {
+      throw new Error(`toasts ${JSON.stringify(h.toasts)}`)
+    }
+    cleanup()
+  })
+
   await test("an empty transcript does not insert anything", async () => {
     const h = makeContext()
     state.transcript = { text: "   ", language: "es" }
@@ -607,6 +624,21 @@ async function run() {
 
     if (state.alerts.length !== 1) throw new Error(`alerts ${state.alerts.length}`)
     if (!state.alerts[0].message.includes("ffmpeg")) throw new Error("status missing ffmpeg")
+    cleanup()
+  })
+
+  await test("settings menu explains full paste", async () => {
+    const h = makeContext()
+    const cleanup = definition.setup(h.context)
+    state.selectQueue = ["paste", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.alerts.length !== 1) throw new Error(`alerts ${state.alerts.length}`)
+    const message = state.alerts[0].message
+    if (!message.includes('"paste": "full"') || !message.includes("cli.json")) {
+      throw new Error(`message ${message}`)
+    }
     cleanup()
   })
 

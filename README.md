@@ -125,6 +125,28 @@ valores la primera vez. «Restablecer» vuelve a aplicar las opciones actuales d
 `opencode.jsonc`. Los ajustes de la TUI son independientes de los de OpenCode
 Desktop.
 
+### Dictados largos
+
+Si la TUI muestra `[Pasted ~N lines]` o «pegó N líneas», está compactando el
+pegado. Para ver todo el texto y corregirlo antes de enviar, edita el
+**`cli.json` de la TUI** (no `opencode.jsonc`):
+
+- Linux: `~/.config/opencode/cli.json`
+- Windows: `C:\Users\<usuario>\.config\opencode\cli.json`
+- Si usas `XDG_CONFIG_HOME`: `$XDG_CONFIG_HOME/opencode/cli.json`
+
+```json
+{
+  "prompt": {
+    "paste": "full"
+  }
+}
+```
+
+Se recarga en vivo, sin reiniciar la TUI. Si el archivo no existe, créalo con
+ese contenido. También puedes ver la ruta desde `/ajustes-voz` → **Ver texto
+completo al dictar**. El plugin no modifica ese archivo.
+
 Guía completa: [`docs/tui.md`](https://github.com/evious/opencode-voice-dictation/blob/main/docs/tui.md).
 
 ## Compatibilidad
@@ -370,6 +392,7 @@ guarda esa contraseña.
 | Falta ffmpeg o falla la conversión del audio | Ajustes → Dictado por voz → whisper.cpp → **Instalar ffmpeg**, o ejecuta `sudo apt install -y ffmpeg`. El motor no puede transcribir sin ffmpeg. |
 | whisper.cpp falla al arrancar | Comprueba que `ffmpeg` está en el `PATH` (`ffmpeg -version`) y que el binario es compatible con tu `glibc` (Ubuntu 22.04+). |
 | whisper.cpp tarda mucho | Usa `base-q5_1` en portátiles modestos; `small-q5_1` necesita más CPU y memoria. La primera transcripción carga el modelo. |
+| El dictado se ve como «pegó N líneas» o `[Pasted ~N lines]` | Es el resumen de pegado de la TUI. Pon `"prompt": { "paste": "full" }` en `~/.config/opencode/cli.json` (Windows: `C:\Users\<usuario>\.config\opencode\cli.json`). Se recarga en vivo. |
 | El RPC devuelve 400 o no cargan las voces de Edge | El plugin server no cargó: Ajustes → Extensiones → Plugins → **Reload**, o reinicia el servicio. |
 | WhisperX pide token de Hugging Face | `huggingface-cli login` y acepta los términos del modelo de VAD de `pyannote`. |
 

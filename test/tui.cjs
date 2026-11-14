@@ -62,6 +62,8 @@ function reset() {
 
 const mocks = {
   "@opencode/plugin/tui": { Plugin: { define: (value) => value } },
+  "node:os": require("node:os"),
+  "node:path": require("node:path"),
   "./rpc.js": { VoiceRpc: { id: "test.voice" } },
   "./speech-text.js": speechText,
   "./sapi-speech.js": {

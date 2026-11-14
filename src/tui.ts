@@ -1,4 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui"
+import { homedir } from "node:os"
+import { join } from "node:path"
 import { VoiceRpc } from "./rpc.js"
 import { chunkForSpeech, cleanForSpeech } from "./speech-text.js"
 import { speakSapi } from "./sapi-speech.js"
@@ -93,6 +95,8 @@ export default Plugin.define({
     const isWin = process.platform === "win32"
     const isLinux = process.platform === "linux"
     const rpc = context.client.rpc(VoiceRpc)
+    const configRoot = process.env.XDG_CONFIG_HOME || join(homedir(), ".config")
+    const cliPath = join(configRoot, "opencode", "cli.json")
 
     let generation = 0
     let busy = false
@@ -101,6 +105,7 @@ export default Plugin.define({
     let recording: LinuxRecording | undefined
     let transcribing = false
     let prepared = false
+    let pasteHintShown = false
     let status: StatusController | undefined
 
     const toast = (message: string, variant: "info" | "success" | "warning" | "error" = "info") => {
@@ -281,7 +286,15 @@ export default Plugin.define({
           return
         }
 
-        if (inserted.message) toast(inserted.message, "info")
+        const multiline = text.includes("\n")
+        const hint = multiline && !pasteHintShown
+        if (hint) pasteHintShown = true
+        const extra = hint
+          ? ` Si la TUI muestra «pegó N líneas», pon "prompt.paste": "full" en ${cliPath} para ver el texto completo.`
+          : ""
+
+        if (inserted.message) toast(inserted.message + extra, "info")
+        else if (extra) toast(`Dictado insertado.${extra}`, "info")
         else toast("Dictado insertado.", "success")
       } catch (error) {
         toast(`No se pudo transcribir: ${errorMessage(error)}`, "error")
@@ -495,6 +508,7 @@ export default Plugin.define({
           { title: "Voz", value: "voice", description: settings.voice },
           { title: "Velocidad", value: "rate", description: `${settings.rate}×` },
           { title: "Omitir código", value: "skipCode", description: settings.skipCode ? "sí" : "no" },
+          { title: "Ver texto completo al dictar", value: "paste", description: "Cómo mostrar todas las líneas" },
         )
 
         if (isLinux) {
@@ -676,6 +690,24 @@ export default Plugin.define({
               draft.skipCode = value
             })
           }
+          continue
+        }
+
+        if (choice === "paste") {
+          await context.ui.dialog.alert({
+            title: "Ver texto completo al dictar",
+            message: [
+              "La TUI compacta los pegados largos como «pegó N líneas».",
+              "Para ver y corregir todo el texto, añade esto a tu cli.json:",
+              "",
+              '{ "prompt": { "paste": "full" } }',
+              "",
+              `Archivo: ${cliPath}`,
+              "",
+              "Si no existe, créalo con ese contenido. Se recarga en vivo.",
+              "El plugin no modifica ese archivo.",
+            ].join("\n"),
+          })
           continue
         }
 
