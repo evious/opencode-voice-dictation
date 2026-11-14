@@ -150,19 +150,44 @@ va justo, quédate en `base-q5_1`.
 | Se queda en «Transcribiendo…» | Mira el toast y el log del servidor de OpenCode; suele ser `ffmpeg` o el binario. |
 | El RPC devuelve 400 | El plugin server no cargó: Ajustes → Extensiones → Plugins → **Reload**. |
 | Tarda mucho | Usa `base-q5_1`; el primer dictado carga el modelo. |
-| No hay píldora | La API GUI solo existe en OpenCode Desktop, no en la consola/TUI. |
+| No hay píldora | La API GUI solo existe en OpenCode Desktop; en la TUI usa `/dictado` y `/leer`. |
+
+## TUI en Linux
+
+La parte TUI ya soporta Linux:
+
+- `/dictado` graba con `ffmpeg` (PulseAudio/ALSA) o `arecord` y transcribe con
+  whisper.cpp.
+- Inserta el texto con `appendPrompt` si el runtime lo expone, o con
+  `xdotool`/`xclip` en X11, `wtype`/`wl-clipboard` en Wayland, o el
+  portapapeles de Windows en WSL.
+- `/leer` usa Edge + `ffplay`/`mpv`; si falla, `spd-say` o `espeak-ng`.
+- `/pausar` pausa o reanuda la lectura.
+
+Requisitos:
+
+```bash
+sudo apt install -y ffmpeg xdotool xclip
+# opcional para la voz de respaldo
+sudo apt install -y speech-dispatcher espeak-ng
+```
+
+El servidor de OpenCode debe correr en Linux para que whisper.cpp esté
+disponible. Guía completa: [`docs/tui.md`](tui.md).
 
 ## Privacidad
 
-El audio se escribe en `/tmp`, se convierte en local y se transcribe en tu CPU.
-No se envía a ningún servicio. Solo la primera descarga usa la red
-(GitHub para el binario y Hugging Face para el modelo).
+El audio se escribe en `/tmp`, se convierte en local y se transcribe en la CPU
+del servidor. Si el servidor es local, no se envía a ningún servicio. Solo la
+primera descarga usa la red (GitHub para el binario y Hugging Face para el
+modelo). En la TUI, Edge envía el texto a Microsoft para sintetizar la voz;
+usa `"engine": "system"` para la voz local.
 
-## Desktop y consola
+## Desktop y TUI
 
 - **OpenCode Desktop**: carga `./gui-experimental`, así que tiene píldora,
   atajo `Ctrl+Shift+M`, `/dictado` y ajustes. whisper.cpp funciona completo.
-- **OpenCode consola/TUI**: no carga la parte GUI. La parte servidor (RPC)
-  existe, pero no hay micrófono ni píldora. Para dictar en la consola haría
-  falta una parte `./tui` que grabara con `arecord`/`ffmpeg`; es un desarrollo
-  aparte y todavía no está incluido.
+- **TUI en Windows**: `/dictado` abre Win+H; `/leer` usa Edge y SAPI.
+- **TUI en Linux**: `/dictado` graba y transcribe con whisper.cpp; `/leer` usa
+  Edge y el reproductor del sistema. Requiere `./tui` (incluido) y un servidor
+  Linux.

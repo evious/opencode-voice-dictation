@@ -81,6 +81,23 @@ const mocks = {
       }
     },
   },
+  "./tui/insert.js": {
+    insertIntoPrompt: async () => ({ ok: false, method: "none", message: "" }),
+  },
+  "./tui/linux/dictation.js": {
+    async startLinuxRecording() {
+      throw new Error("Linux recorder is not used on win32")
+    },
+  },
+  "./tui/linux/playback.js": {
+    async playMp3Base64() {
+      return { stop() {}, done: Promise.resolve(false) }
+    },
+    speakLinux(_text, _rate, onDone) {
+      setImmediate(() => onDone(false))
+      return { stop() {} }
+    },
+  },
   "./win-h.js": {
     async sendVoiceTypingShortcut() {
       state.dictateCalls++
@@ -170,14 +187,17 @@ async function run() {
     const layer = h.layers[0]
     if (!layer) throw new Error("no keymap layer")
     if (layer.mode !== "global") throw new Error(`mode ${layer.mode}`)
-    if (layer.bindings.length !== 2) throw new Error(`bindings ${layer.bindings.length}`)
+    if (layer.bindings.length !== 3) throw new Error(`bindings ${layer.bindings.length}`)
 
     const dictate = command(h.layers, "dictate")
     const read = command(h.layers, "read")
+    const pause = command(h.layers, "pause")
     if (dictate.bind !== "<leader>d") throw new Error(`dictate bind ${dictate.bind}`)
     if (read.bind !== "<leader>v") throw new Error(`read bind ${read.bind}`)
+    if (pause.bind !== "<leader>p") throw new Error(`pause bind ${pause.bind}`)
     if (dictate.slash.name !== "dictado") throw new Error(`dictate slash ${dictate.slash.name}`)
     if (read.slash.name !== "leer") throw new Error(`read slash ${read.slash.name}`)
+    if (pause.slash.name !== "pausar") throw new Error(`pause slash ${pause.slash.name}`)
     cleanup()
   })
 

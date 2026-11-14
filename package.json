@@ -1,6 +1,6 @@
 {
   "name": "opencode-voice-dictation",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Offline voice dictation and read-aloud for OpenCode Desktop and TUI on Windows and Linux",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",
@@ -50,7 +50,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch",
-    "test": "node test/speech-text.cjs && node test/tui.cjs && node test/smoke.cjs",
+    "test": "node test/speech-text.cjs && node test/tui.cjs && node test/tui-linux.cjs && node test/smoke.cjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build && npm test"
   },
