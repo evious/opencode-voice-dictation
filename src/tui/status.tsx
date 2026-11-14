@@ -1,5 +1,4 @@
 /** @jsxImportSource @opentui/solid */
-import { createSignal } from "solid-js"
 import type { Plugin } from "@opencode/plugin/tui"
 
 export type TuiMode = "idle" | "recording" | "transcribing" | "reading" | "paused"
@@ -22,12 +21,24 @@ export interface StatusController {
  *
  * The commands and keybinds remain available. Mouse clicks depend on the
  * terminal forwarding mouse events, which most modern terminals do.
+ *
+ * State lives in the host's memory store instead of a plugin-local signal:
+ * the TUI may render with a different copy of Solid than the plugin, and a
+ * local createSignal would not update the host-rendered slot.
  */
 export function createStatusController(context: Plugin.Context, actions: StatusActions): StatusController {
-  const [mode, setMode] = createSignal<TuiMode>("idle")
+  const [state, setState] = context.storage.memory<{ mode: TuiMode }>("status", {
+    initial: { mode: "idle" },
+  })
+
+  const setMode = (mode: TuiMode) => {
+    setState((draft) => {
+      draft.mode = mode
+    })
+  }
 
   const Status = () => {
-    const current = mode()
+    const current = state.mode
     const busy = current === "transcribing"
     const reading = current === "reading" || current === "paused"
 
