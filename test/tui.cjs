@@ -30,6 +30,13 @@ const state = {
   sapiCalls: [],
   playerMode: "ok",
   pendingResolve: undefined,
+  selectQueue: [],
+  selectCalls: [],
+  storageSettings: undefined,
+  voices: [
+    { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
+    { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
+  ],
 }
 
 function reset() {
@@ -40,6 +47,13 @@ function reset() {
   state.sapiCalls = []
   state.playerMode = "ok"
   state.pendingResolve = undefined
+  state.selectQueue = []
+  state.selectCalls = []
+  state.storageSettings = undefined
+  state.voices = [
+    { id: "es-ES-XimenaNeural", label: "es-ES · Ximena" },
+    { id: "es-MX-DaliaNeural", label: "es-MX · Dalia" },
+  ]
 }
 
 const mocks = {
@@ -60,7 +74,7 @@ const mocks = {
   },
   "./tui/player.js": {
     playMp3Base64(base64) {
-      const call = { base64, stopped: false }
+      const call = { base64, stopped: false, paused: 0, resumed: 0 }
       state.playerCalls.push(call)
 
       let resolveDone
@@ -77,6 +91,12 @@ const mocks = {
         stop() {
           call.stopped = true
           resolveDone(false)
+        },
+        pause() {
+          call.paused++
+        },
+        resume() {
+          call.resumed++
         },
       }
     },
@@ -130,6 +150,7 @@ function makeContext(options = {}) {
         state.edgeCalls.push(input)
         return "YXVkaW8="
       },
+      edgeVoices: async () => state.voices,
     }),
   }
 
@@ -139,7 +160,10 @@ function makeContext(options = {}) {
       toast: { show: (toast) => toasts.push(toast) },
       router: { current: () => route },
       dialog: {
-        select: async () => undefined,
+        select: async (input) => {
+          state.selectCalls.push(input)
+          return state.selectQueue.shift()
+        },
         confirm: async () => true,
         alert: async () => {},
       },
@@ -147,8 +171,8 @@ function makeContext(options = {}) {
     client,
     storage: {
       store: (_key, { initial }) => {
-        const value = { ...initial }
-        return [value, async (mutation) => mutation(value)]
+        state.storageSettings = { ...initial }
+        return [state.storageSettings, async (mutation) => mutation(state.storageSettings)]
       },
     },
     keymap: {
@@ -278,6 +302,40 @@ async function run() {
     }
     state.pendingResolve?.(false)
     await first
+    cleanup()
+  })
+
+  await test("pauses and resumes Windows playback", async () => {
+    const h = makeContext()
+    h.setMessages({
+      data: [{ type: "assistant", content: [{ type: "text", text: "Una frase larga." }] }],
+      cursor: {},
+    })
+    state.playerMode = "pending"
+    const cleanup = definition.setup(h.context)
+    const read = command(h.layers, "read")
+    const pause = command(h.layers, "pause")
+
+    const first = read.run()
+    await tick()
+    pause.run()
+    if (state.playerCalls[0].paused !== 1) throw new Error("playback did not pause")
+    pause.run()
+    if (state.playerCalls[0].resumed !== 1) throw new Error("playback did not resume")
+
+    state.pendingResolve?.(false)
+    await first
+    cleanup()
+  })
+
+  await test("settings menu changes the read engine on Windows", async () => {
+    const h = makeContext()
+    const cleanup = definition.setup(h.context)
+    state.selectQueue = ["engine", "system", "done"]
+
+    await command(h.layers, "settings").run()
+
+    if (state.storageSettings.engine !== "system") throw new Error(`engine ${state.storageSettings.engine}`)
     cleanup()
   })
 

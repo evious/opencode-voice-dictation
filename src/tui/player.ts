@@ -7,7 +7,8 @@ import { join } from "node:path"
 const POWERSHELL = "powershell.exe"
 
 const PLAYER_SCRIPT = `param(
-  [Parameter(Mandatory = $true)][string]$Path
+  [Parameter(Mandatory = $true)][string]$Path,
+  [Parameter(Mandatory = $true)][string]$Control
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +34,27 @@ try {
     exit 5
   }
 
-  Start-Sleep -Milliseconds ([int]$duration + 350)
+  while ($true) {
+    Start-Sleep -Milliseconds 100
+
+    if (Test-Path -LiteralPath $Control) {
+      $command = ""
+      $raw = $null
+      try { $raw = Get-Content -Raw -LiteralPath $Control } catch { }
+      if ($null -ne $raw) { $command = $raw.Trim() }
+
+      if ($command) {
+        Remove-Item -LiteralPath $Control -Force -ErrorAction SilentlyContinue
+        if ($command -eq "pause") { $player.Pause() }
+        elseif ($command -eq "resume") { $player.Play() }
+        elseif ($command -eq "stop") { break }
+      }
+    }
+
+    $session = $player.PlaybackSession
+    if ($session.Position.TotalMilliseconds -ge ($duration - 150)) { break }
+  }
+
   $player.Pause()
   $player.Dispose()
   exit 0
@@ -48,6 +69,8 @@ try {
 
 export interface Playback {
   stop(): void
+  pause?(): void
+  resume?(): void
   done: Promise<boolean>
 }
 
@@ -78,6 +101,7 @@ export function playMp3Base64(base64: string): Playback {
   const id = randomUUID()
   const file = join(workDir(), `speech-${id}.mp3`)
   const script = join(workDir(), `speech-${id}.ps1`)
+  const control = join(workDir(), `speech-${id}.ctl`)
   writeFileSync(file, Buffer.from(base64, "base64"))
   writeFileSync(script, PLAYER_SCRIPT, "utf8")
 
@@ -89,7 +113,7 @@ export function playMp3Base64(base64: string): Playback {
   })
 
   const clean = () => {
-    for (const path of [file, script]) {
+    for (const path of [file, script, control]) {
       try {
         rmSync(path, { force: true })
       } catch {
@@ -105,9 +129,29 @@ export function playMp3Base64(base64: string): Playback {
     resolveDone(ok)
   }
 
+  const writeControl = (command: string) => {
+    if (settled) return
+    try {
+      writeFileSync(control, command, "utf8")
+    } catch {
+      // The player may have exited between checks.
+    }
+  }
+
   child = spawn(
     POWERSHELL,
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Path", file],
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      script,
+      "-Path",
+      file,
+      "-Control",
+      control,
+    ],
     {
       windowsHide: true,
       stdio: "ignore",
@@ -120,8 +164,15 @@ export function playMp3Base64(base64: string): Playback {
   return {
     stop() {
       if (settled) return
+      writeControl("stop")
       if (child) killTree(child)
       finish(false)
+    },
+    pause() {
+      writeControl("pause")
+    },
+    resume() {
+      writeControl("resume")
     },
     done,
   }

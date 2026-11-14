@@ -1,6 +1,6 @@
 {
   "name": "opencode-voice-dictation",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Offline voice dictation and read-aloud for OpenCode Desktop and TUI on Windows and Linux",
   "license": "MIT",
   "author": "Fran Carlos <francarlos803@gmail.com>",

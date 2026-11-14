@@ -794,7 +794,7 @@ export default Plugin.define({
           group: "Voz",
           bind: "<leader>p",
           palette: true,
-          slash: { name: "pausar", aliases: ["pause"] },
+          slash: { name: "pausar", aliases: ["pause", "pausa"] },
           suggested: false,
           run: togglePause,
         },

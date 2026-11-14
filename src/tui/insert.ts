@@ -154,13 +154,13 @@ async function pasteWayland(): Promise<boolean> {
   return result.code === 0
 }
 
-async function copyWsl(ps: string, text: string): Promise<boolean> {
-  const result = await run(
-    ps,
-    ["-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -Value ([Console]::In.ReadToEnd())"],
-    text,
-  )
+export function wslClipboardCommand(text: string): string {
+  const encoded = Buffer.from(text, "utf8").toString("base64")
+  return `Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')))`
+}
 
+async function copyWsl(ps: string, text: string): Promise<boolean> {
+  const result = await run(ps, ["-NoProfile", "-NonInteractive", "-Command", wslClipboardCommand(text)])
   return result.code === 0
 }
 

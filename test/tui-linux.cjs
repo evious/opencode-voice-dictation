@@ -616,6 +616,17 @@ async function run() {
     if (result.ok || result.method !== "none") throw new Error(`result ${JSON.stringify(result)}`)
   })
 
+  await test("WSL clipboard command preserves UTF-8 via base64", async () => {
+    const text = "¿Qué puedes decirme sobre el proyecto?"
+    const command = insertModule.wslClipboardCommand(text)
+    if (command.includes("Console::In")) throw new Error("still uses Console::In")
+
+    const match = command.match(/FromBase64String\('([^']+)'\)/)
+    if (!match) throw new Error(`base64 not found: ${command}`)
+    const decoded = Buffer.from(match[1], "base64").toString("utf8")
+    if (decoded !== text) throw new Error(`decoded ${decoded}`)
+  })
+
   if (failures > 0) process.exit(1)
 }
 

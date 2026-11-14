@@ -9,7 +9,7 @@ Windows delega el dictado en Win+H y en Linux usa whisper.cpp.
 |---|---|---|
 | `/dictado` | `<leader>d` (`Ctrl+X`, luego `d`) | Windows: abre Win+H. Linux: empieza/para la grabación y transcribe. |
 | `/leer` | `<leader>v` (`Ctrl+X`, luego `v`) | Lee la última respuesta. Si ya está leyendo, la detiene. |
-| `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura (Linux con ffplay/spd-say). |
+| `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura. También `/pausa`. |
 | `/ajustes-voz` | — | Menú de ajustes de la TUI. |
 
 También aparecen en la paleta (`Ctrl+P`) y en la ayuda de atajos.
@@ -45,6 +45,7 @@ independientes de los de OpenCode Desktop.
 - OpenCode TUI en Windows.
 - Win+H disponible (Windows 11).
 - Para la lectura, Edge (online) o System.Speech (SAPI).
+- `/pausar` y `/pausa` funcionan con Edge; con SAPI no hay pausa real.
 
 ### Linux
 
@@ -141,6 +142,8 @@ Puedes probar la TUI Linux en WSL:
 - La grabación usa `ffmpeg -f pulse -i default`.
 - `xdotool` no puede escribir en Windows Terminal; la inserción usa
   `powershell.exe` + portapapeles + `SendKeys`.
+- El portapapeles se pasa como base64 y se decodifica como UTF-8 en PowerShell
+  para conservar acentos y signos como `¿`, `ñ` o `á`.
 - La TUI debe ejecutarse **dentro de WSL**, no desde Windows, para que
   `process.platform === "linux"`.
 - El servidor de OpenCode debe correr en WSL/Linux para whisper.cpp.

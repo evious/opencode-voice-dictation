@@ -56,11 +56,11 @@ El paquete exporta una parte TUI para Windows y Linux. Dicta y escucha la
 | --- | --- | --- |
 | `/dictado` | `<leader>d` (`Ctrl+X`, luego `d`) | Windows: abre Win+H. Linux: graba y transcribe con whisper.cpp. |
 | `/leer` | `<leader>v` (`Ctrl+X`, luego `v`) | Lee la última respuesta. Si ya está leyendo, la detiene. |
-| `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura (Linux con ffplay/spd-say). |
+| `/pausar` | `<leader>p` (`Ctrl+X`, luego `p`) | Pausa o reanuda la lectura. También `/pausa`. |
 | `/ajustes-voz` | — | Menú de ajustes de la TUI: modelo, idioma, inserción, voz, velocidad, etc. |
 
-**Windows**: la lectura usa Edge y, si falla, System.Speech (SAPI). El dictado
-delega en Win+H.
+**Windows**: la lectura usa Edge y, si falla, System.Speech (SAPI). `/pausar`
+funciona con Edge; con SAPI no hay pausa real. El dictado delega en Win+H.
 
 **Linux**: la TUI graba con `ffmpeg` (PulseAudio/ALSA) o `arecord`, transcribe
 con whisper.cpp por RPC e inserta el texto en el prompt. La lectura usa Edge y
